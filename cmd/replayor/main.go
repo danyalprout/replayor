@@ -2,14 +2,12 @@ package main
 
 import (
 	"context"
-	"fmt"
 	"os"
 
 	"github.com/danyalprout/replayor/packages/clients"
 	"github.com/danyalprout/replayor/packages/config"
 	"github.com/danyalprout/replayor/packages/replayor"
-	"github.com/danyalprout/replayor/packages/storage"
-	"github.com/danyalprout/replayor/packages/strategies"
+	"github.com/danyalprout/replayor/packages/stats"
 	opservice "github.com/ethereum-optimism/optimism/op-service"
 	"github.com/ethereum-optimism/optimism/op-service/cliapp"
 	oplog "github.com/ethereum-optimism/optimism/op-service/log"
@@ -50,21 +48,13 @@ func Main() cliapp.LifecycleAction {
 
 		c, err := clients.SetupClients(cfg, logger, ctx)
 
-		s, err := storage.NewStorage(logger, cfg)
+		// Benchmark stats
+		s, err := stats.NewStorage(logger, cfg)
 		if err != nil {
 			return nil, err
 		}
+		statsRecorder := stats.NewStoredStats(s, logger)
 
-		startBlock, err := c.DestNode.BlockByNumber(ctx, nil)
-		if err != nil {
-			return nil, err
-		}
-
-		strategy := strategies.LoadStrategy(cfg, logger, c, startBlock)
-		if s == nil {
-			return nil, fmt.Errorf("invalid strategy: %s", cfg.Strategy)
-		}
-
-		return replayor.NewExec(c, cfg, logger, strategy, s, startBlock), nil
+		return replayor.NewService(c, statsRecorder, cfg, logger), nil
 	}
 }

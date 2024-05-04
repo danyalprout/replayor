@@ -61,6 +61,11 @@ var (
 		Usage:   "desired gas limit",
 		EnvVars: opservice.PrefixEnvVar(EnvVarPrefix, "GAS_LIMIT"),
 	}
+	BenchmarkStartBlock = &cli.Uint64Flag{
+		Name:    "benchmark-start-block",
+		Usage:   "start block for the benchmarking",
+		EnvVars: opservice.PrefixEnvVar(EnvVarPrefix, "BENCHMARK_START_BLOCK"),
+	}
 	S3Bucket = &cli.StringFlag{
 		Name:     "s3-bucket",
 		Usage:    "The S3 bucket to store results in",
@@ -83,7 +88,7 @@ var (
 
 func init() {
 	Flags = append(Flags, oplog.CLIFlags(EnvVarPrefix)...)
-	Flags = append(Flags, EngineApiSecret, SourceNodeUrl, ChainId, EngineApiUrl, ExecutionUrl, Strategy, BlockCount, GasTarget, GasLimit, S3Bucket, StorageType, DiskPath)
+	Flags = append(Flags, EngineApiSecret, SourceNodeUrl, ChainId, EngineApiUrl, ExecutionUrl, Strategy, BlockCount, GasTarget, GasLimit, S3Bucket, StorageType, DiskPath, BenchmarkStartBlock)
 }
 
 // Flags contains the list of configuration options available to the binary.

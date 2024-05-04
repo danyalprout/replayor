@@ -14,20 +14,21 @@ import (
 )
 
 type ReplayorConfig struct {
-	EngineApiSecret common.Hash
-	SourceNodeUrl   string
-	ChainId         string
-	RollupConfig    *rollup.Config
-	EngineApiUrl    string
-	ExecutionUrl    string
-	Strategy        string
-	BlockCount      int
-	GasTarget       int
-	GasLimit        int
-	TestName        string
-	Bucket          string
-	StorageType     string
-	DiskPath        string
+	EngineApiSecret     common.Hash
+	SourceNodeUrl       string
+	ChainId             string
+	RollupConfig        *rollup.Config
+	EngineApiUrl        string
+	ExecutionUrl        string
+	Strategy            string
+	BlockCount          int
+	GasTarget           int
+	GasLimit            int
+	BenchmarkStartBlock uint64
+	TestName            string
+	Bucket              string
+	StorageType         string
+	DiskPath            string
 }
 
 func (r ReplayorConfig) TestDescription() string {
@@ -56,19 +57,20 @@ func LoadReplayorConfig(cliCtx *cli.Context, l log.Logger) (ReplayorConfig, erro
 	}
 
 	return ReplayorConfig{
-		EngineApiSecret: secret,
-		SourceNodeUrl:   cliCtx.String(SourceNodeUrl.Name),
-		ChainId:         chainId,
-		RollupConfig:    rollupCfg,
-		EngineApiUrl:    cliCtx.String(EngineApiUrl.Name),
-		ExecutionUrl:    cliCtx.String(ExecutionUrl.Name),
-		Strategy:        cliCtx.String(Strategy.Name),
-		BlockCount:      cliCtx.Int(BlockCount.Name),
-		GasTarget:       cliCtx.Int(GasTarget.Name),
-		GasLimit:        cliCtx.Int(GasLimit.Name),
-		TestName:        hostname,
-		Bucket:          cliCtx.String(S3Bucket.Name),
-		StorageType:     cliCtx.String(StorageType.Name),
-		DiskPath:        cliCtx.String(DiskPath.Name),
+		EngineApiSecret:     secret,
+		SourceNodeUrl:       cliCtx.String(SourceNodeUrl.Name),
+		ChainId:             chainId,
+		RollupConfig:        rollupCfg,
+		EngineApiUrl:        cliCtx.String(EngineApiUrl.Name),
+		ExecutionUrl:        cliCtx.String(ExecutionUrl.Name),
+		Strategy:            cliCtx.String(Strategy.Name),
+		BlockCount:          cliCtx.Int(BlockCount.Name),
+		GasTarget:           cliCtx.Int(GasTarget.Name),
+		GasLimit:            cliCtx.Int(GasLimit.Name),
+		BenchmarkStartBlock: cliCtx.Uint64(BenchmarkStartBlock.Name),
+		TestName:            hostname,
+		Bucket:              cliCtx.String(S3Bucket.Name),
+		StorageType:         cliCtx.String(StorageType.Name),
+		DiskPath:            cliCtx.String(DiskPath.Name),
 	}, nil
 }

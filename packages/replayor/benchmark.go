@@ -2,17 +2,15 @@ package replayor
 
 import (
 	"context"
-	"errors"
 	"math/big"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	"github.com/danyalprout/replayor/packages/clients"
-	"github.com/danyalprout/replayor/packages/config"
-	"github.com/danyalprout/replayor/packages/storage"
+	"github.com/danyalprout/replayor/packages/stats"
 	"github.com/danyalprout/replayor/packages/strategies"
 	"github.com/ethereum-optimism/optimism/op-bindings/predeploys"
+	"github.com/ethereum-optimism/optimism/op-node/rollup"
 	"github.com/ethereum-optimism/optimism/op-service/eth"
 	"github.com/ethereum-optimism/optimism/op-service/retry"
 	"github.com/ethereum/go-ethereum/common"
@@ -22,47 +20,44 @@ import (
 	"golang.design/x/chann"
 )
 
-var ErrAlreadyStopped = errors.New("already stopped")
+const (
+	concurrency = 25
+)
 
-type Exec struct {
-	stopped atomic.Bool
+type Benchmark struct {
 	clients clients.Clients
+	s       stats.Stats
 
 	log log.Logger
-	cfg config.ReplayorConfig
 
-	startBlock *types.Block
+	currentBlock *types.Block
 
 	incomingBlocks chan *types.Block
 	processBlocks  chan strategies.BlockCreationParams
-	recordStats    *chann.Chann[storage.BlockCreationStats]
+	recordStats    *chann.Chann[stats.BlockCreationStats]
 
 	previousReplayedBlockHash common.Hash
 	strategy                  strategies.Strategy
-	storage                   storage.Storage
 
-	stats    []storage.BlockCreationStats
-	sm       sync.Mutex
-	addCount int
+	sm                  sync.Mutex
+	remainingBlockCount uint64
+	rollupCfg           *rollup.Config
+	startBlockNum       uint64
+	endBlockNum         uint64
 }
 
-func (r *Exec) getBlockFromSourceNode(ctx context.Context, blockNum uint64) (*types.Block, error) {
+func (r *Benchmark) getBlockFromSourceNode(ctx context.Context, blockNum uint64) (*types.Block, error) {
 	return retry.Do(ctx, 10, retry.Exponential(), func() (*types.Block, error) {
 		return r.clients.SourceNode.BlockByNumber(ctx, big.NewInt(int64(blockNum)))
 	})
 }
 
-func (r *Exec) loadBlocks(ctx context.Context) {
-	startNum := r.startBlock.NumberU64()
-
-	concurrency := uint64(25)
-
-	endBlock := r.startBlock.NumberU64() + uint64(r.cfg.BlockCount)
-	for blockStartRange := startNum + 1; blockStartRange <= endBlock; blockStartRange += concurrency {
+func (r *Benchmark) loadBlocks(ctx context.Context) {
+	for blockStartRange := r.startBlockNum; blockStartRange <= r.endBlockNum; blockStartRange += concurrency {
 		results := make([]*types.Block, concurrency)
 
 		var wg sync.WaitGroup
-		wg.Add(int(concurrency))
+		wg.Add(concurrency)
 
 		var m sync.Mutex
 
@@ -98,10 +93,10 @@ func (r *Exec) loadBlocks(ctx context.Context) {
 	close(r.incomingBlocks)
 }
 
-func (r *Exec) addBlock(ctx context.Context, currentBlock strategies.BlockCreationParams) {
+func (r *Benchmark) addBlock(ctx context.Context, currentBlock strategies.BlockCreationParams) {
 	l := r.log.New("source", "add-block", "block", currentBlock.Number)
 
-	stats := storage.BlockCreationStats{}
+	stats := stats.BlockCreationStats{}
 
 	txns := currentBlock.Transactions
 
@@ -133,7 +128,7 @@ func (r *Exec) addBlock(ctx context.Context, currentBlock strategies.BlockCreati
 		ParentBeaconBlockRoot: currentBlock.BeaconRoot,
 	}
 
-	if r.cfg.RollupConfig.IsCanyon(uint64(currentBlock.Time)) {
+	if r.rollupCfg.IsCanyon(uint64(currentBlock.Time)) {
 		attrs.Withdrawals = &types.Withdrawals{}
 	}
 
@@ -215,9 +210,19 @@ func (r *Exec) addBlock(ctx context.Context, currentBlock strategies.BlockCreati
 	r.previousReplayedBlockHash = envelope.ExecutionPayload.BlockHash
 
 	r.recordStats.In() <- stats
+
+	r.sm.Lock()
+	defer r.sm.Unlock()
+
+	if r.remainingBlockCount == 0 {
+		r.log.Info("finished processing blocks")
+		return
+	}
+
+	r.remainingBlockCount -= 1
 }
 
-func (r *Exec) enrich(ctx context.Context, stats *storage.BlockCreationStats) {
+func (r *Benchmark) enrich(ctx context.Context, stats *stats.BlockCreationStats) {
 	receipts, err := retry.Do(ctx, 10, retry.Exponential(), func() ([]*types.Receipt, error) {
 		return r.clients.DestNode.BlockReceipts(ctx, rpc.BlockNumberOrHash{BlockHash: &stats.BlockHash})
 	})
@@ -238,7 +243,7 @@ func (r *Exec) enrich(ctx context.Context, stats *storage.BlockCreationStats) {
 	stats.Success = float64(success) / float64(len(receipts))
 }
 
-func (r *Exec) enrichAndRecordStats(ctx context.Context) {
+func (r *Benchmark) enrichAndRecordStats(ctx context.Context) {
 	for i := 0; i < 5; i++ {
 		go func() {
 			for {
@@ -246,9 +251,7 @@ func (r *Exec) enrichAndRecordStats(ctx context.Context) {
 				case stats := <-r.recordStats.Out():
 					r.enrich(ctx, &stats)
 
-					r.sm.Lock()
-					r.stats = append(r.stats, stats)
-					r.sm.Unlock()
+					r.s.RecordBlockStats(stats)
 
 					r.log.Debug("block stats", "BlockNumber", stats.BlockNumber, "BlockHash", stats.BlockHash, "TxnCount", stats.TxnCount, "TotalTime", stats.TotalTime, "FCUTime", stats.FCUTime, "GetTime", stats.GetTime, "NewTime", stats.NewTime, "FCUNoAttrsTime", stats.FCUNoAttrsTime, "Success", stats.Success, "GasUsed", stats.GasUsed, "GasLimit", stats.GasLimit)
 				case <-ctx.Done():
@@ -259,10 +262,15 @@ func (r *Exec) enrichAndRecordStats(ctx context.Context) {
 	}
 }
 
-func (r *Exec) submitBlocks(ctx context.Context) {
+func (r *Benchmark) submitBlocks(ctx context.Context) {
 	for {
 		select {
 		case block := <-r.processBlocks:
+			if block.Number > r.endBlockNum {
+				r.log.Debug("stopping block processing")
+				continue
+			}
+
 			r.addBlock(ctx, block)
 		case <-ctx.Done():
 			return
@@ -270,25 +278,7 @@ func (r *Exec) submitBlocks(ctx context.Context) {
 	}
 }
 
-func (r *Exec) RecordStats(ctx context.Context) {
-	r.sm.Lock()
-	stats := r.stats
-	r.sm.Unlock()
-
-	_, err := retry.Do(ctx, 3, retry.Fixed(time.Second), func() (interface{}, error) {
-		err := r.storage.Write(ctx, stats)
-		if err != nil {
-			r.log.Info("error writing to storage", err)
-		}
-		return nil, err
-	})
-
-	if err != nil {
-		r.log.Error("error writing to storage", "err", err)
-	}
-}
-
-func (r *Exec) mapBlocks(ctx context.Context) {
+func (r *Benchmark) mapBlocks(ctx context.Context) {
 	for {
 		select {
 		case b := <-r.incomingBlocks:
@@ -303,12 +293,6 @@ func (r *Exec) mapBlocks(ctx context.Context) {
 			}
 
 			r.processBlocks <- *params
-			r.addCount -= 1
-
-			if r.addCount == 0 {
-				r.log.Info("finished processing blocks")
-				return
-			}
 		case <-ctx.Done():
 			return
 		}
@@ -316,7 +300,7 @@ func (r *Exec) mapBlocks(ctx context.Context) {
 
 }
 
-func (r *Exec) Run(ctx context.Context) {
+func (r *Benchmark) Run(ctx context.Context) {
 	go r.loadBlocks(ctx)
 	go r.mapBlocks(ctx)
 	go r.submitBlocks(ctx)
@@ -327,7 +311,7 @@ func (r *Exec) Run(ctx context.Context) {
 
 	l := r.log.New("source", "monitor")
 
-	lastBlockNum := r.startBlock.NumberU64()
+	lastBlockNum := r.currentBlock.NumberU64()
 
 	for {
 		select {
@@ -337,12 +321,16 @@ func (r *Exec) Run(ctx context.Context) {
 				l.Error("unable to load current block", "err", err)
 			}
 
-			l.Info("replay progress", "blocks", currentBlock.NumberU64()-lastBlockNum, "incomingBlocks", len(r.incomingBlocks), "processBlocks", len(r.processBlocks), "currentBlock", currentBlock.NumberU64(), "statProgress", r.recordStats.Len())
+			l.Info("replay progress", "blocks", currentBlock.NumberU64()-lastBlockNum, "incomingBlocks", len(r.incomingBlocks), "processBlocks", len(r.processBlocks), "currentBlock", currentBlock.NumberU64(), "statProgress", r.recordStats.Len(), "remaining", r.remainingBlockCount)
 
 			lastBlockNum = currentBlock.NumberU64()
 
-			if r.addCount == 0 {
-				r.RecordStats(ctx)
+			r.sm.Lock()
+			rc := r.remainingBlockCount
+			r.sm.Unlock()
+
+			if rc == 0 {
+				r.s.Write(ctx)
 				return
 			}
 		case <-ctx.Done():
@@ -351,40 +339,31 @@ func (r *Exec) Run(ctx context.Context) {
 	}
 }
 
-func NewExec(c clients.Clients, cfg config.ReplayorConfig, logger log.Logger, strategy strategies.Strategy, s storage.Storage, block *types.Block) *Exec {
-	r := &Exec{
+// Start block
+// End block
+func NewBenchmark(
+	c clients.Clients,
+	rollupCfg *rollup.Config,
+	logger log.Logger,
+	strategy strategies.Strategy,
+	s stats.Stats,
+	currentBlock *types.Block,
+	benchmarkBlockCount uint64) *Benchmark {
+	r := &Benchmark{
 		clients:                   c,
-		cfg:                       cfg,
+		rollupCfg:                 rollupCfg,
 		log:                       logger,
 		incomingBlocks:            make(chan *types.Block, 25),
 		processBlocks:             make(chan strategies.BlockCreationParams, 25),
-		recordStats:               chann.New[storage.BlockCreationStats](),
+		recordStats:               chann.New[stats.BlockCreationStats](),
 		strategy:                  strategy,
-		storage:                   s,
-		startBlock:                block,
-		previousReplayedBlockHash: block.Hash(),
-		addCount:                  cfg.BlockCount,
+		s:                         s,
+		currentBlock:              currentBlock,
+		startBlockNum:             currentBlock.NumberU64() + 1,
+		endBlockNum:               currentBlock.NumberU64() + 1 + benchmarkBlockCount,
+		remainingBlockCount:       benchmarkBlockCount,
+		previousReplayedBlockHash: currentBlock.Hash(),
 	}
 
 	return r
-}
-
-func (r *Exec) Start(ctx context.Context) error {
-	r.Run(ctx)
-	return nil
-}
-
-func (r *Exec) Stop(ctx context.Context) error {
-	if r.stopped.Load() {
-		return ErrAlreadyStopped
-	}
-
-	r.stopped.Store(true)
-	// todo actually stop it
-
-	return nil
-}
-
-func (r *Exec) Stopped() bool {
-	return r.stopped.Load()
 }
