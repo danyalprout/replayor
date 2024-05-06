@@ -27,7 +27,7 @@ type S3Storage struct {
 }
 
 func NewS3Storage(l log.Logger, cfg config.ReplayorConfig) (*S3Storage, error) {
-	c := credentials.NewEnvAWS()
+	c := credentials.NewIAM("")
 
 	client, err := minio.New(defaultEndpoint, &minio.Options{
 		Creds:  c,
