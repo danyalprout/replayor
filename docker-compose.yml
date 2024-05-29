@@ -19,12 +19,12 @@ services:
     volumes:
       - ./reth-data:/data
       - ./secret:/secret
-    env_file: "test-configs/base-mainnet-replay.env"
+    env_file: "test-configs/base-mainnet-replay-reth.env"
   replayor:
     build: .
     command: [ "/app/bin/replayor" ]
     network_mode: "host"
-    env_file: "test-configs/base-mainnet-replay.env"
+    env_file: "test-configs/base-mainnet-replay-reth.env"
     volumes:
       - ./secret:/secret
       - ./results:/results
