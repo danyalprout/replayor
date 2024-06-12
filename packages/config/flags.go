@@ -24,8 +24,14 @@ var (
 	ChainId = &cli.StringFlag{
 		Name:     "chain-id",
 		Usage:    "The chain id for the node being benchmarked",
-		Required: true,
+		Required: false,
 		EnvVars:  opservice.PrefixEnvVar(EnvVarPrefix, "CHAIN_ID"),
+	}
+	RollupConfigPath = &cli.StringFlag{
+		Name:     "rollup-config-path",
+		Usage:    "The path to the rollup config",
+		Required: false,
+		EnvVars:  opservice.PrefixEnvVar(EnvVarPrefix, "ROLLUP_CFG_PATH"),
 	}
 	EngineApiUrl = &cli.StringFlag{
 		Name:    "engine-api-url",
@@ -88,7 +94,7 @@ var (
 
 func init() {
 	Flags = append(Flags, oplog.CLIFlags(EnvVarPrefix)...)
-	Flags = append(Flags, EngineApiSecret, SourceNodeUrl, ChainId, EngineApiUrl, ExecutionUrl, Strategy, BlockCount, GasTarget, GasLimit, S3Bucket, StorageType, DiskPath, BenchmarkStartBlock)
+	Flags = append(Flags, EngineApiSecret, SourceNodeUrl, ChainId, EngineApiUrl, ExecutionUrl, Strategy, BlockCount, GasTarget, GasLimit, S3Bucket, StorageType, DiskPath, BenchmarkStartBlock, RollupConfigPath)
 }
 
 // Flags contains the list of configuration options available to the binary.
