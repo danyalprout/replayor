@@ -45,8 +45,13 @@ func LoadReplayorConfig(cliCtx *cli.Context, l log.Logger) (ReplayorConfig, erro
 	secret := common.HexToHash(strings.TrimSpace(string(jwtBytes)))
 
 	chainId := cliCtx.String(ChainId.Name)
+	rollupCfgPath := cliCtx.String(RollupConfigPath.Name)
 
-	rollupCfg, err := opnode.NewRollupConfig(l, chainId, "")
+	if chainId == "" && rollupCfgPath == "" {
+		return ReplayorConfig{}, fmt.Errorf("must provide either chain id or rollup config path")
+	}
+
+	rollupCfg, err := opnode.NewRollupConfig(l, chainId, rollupCfgPath)
 	if err != nil {
 		return ReplayorConfig{}, err
 	}
