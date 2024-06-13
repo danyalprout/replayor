@@ -5,8 +5,8 @@ RUN apt-get update && apt-get -y upgrade && apt-get install -y git libclang-dev 
 RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
 ENV PATH="/root/.cargo/bin:${PATH}"
 
-ENV REPO=https://github.com/BrianBland/reth.git
-RUN git clone $REPO . && git checkout a8ad8ebb0706ec8926fda67ee12e3c55147531af
+ENV REPO=https://github.com/paradigmxyz/reth.git
+RUN git clone $REPO . && git checkout 5e778317fb6ef0809fbd399a583ac6fb9befad2b
 
 # Note: Not including `asm-keccak` since it's not supported for some local machines
 RUN cargo build --bin op-reth --locked --features jemalloc,optimism --profile maxperf

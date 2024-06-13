@@ -130,6 +130,7 @@ func (r *Benchmark) addBlock(ctx context.Context, currentBlock strategies.BlockC
 	}
 
 	if r.rollupCfg.IsCanyon(uint64(currentBlock.Time)) {
+		l.Info("canyon detected", "time", currentBlock.Time)
 		attrs.Withdrawals = &types.Withdrawals{}
 	}
 

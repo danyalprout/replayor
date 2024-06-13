@@ -35,6 +35,13 @@ func (r ReplayorConfig) TestDescription() string {
 	return fmt.Sprintf("%s-%d", r.Strategy, r.BlockCount)
 }
 
+func valueOrNil(i *uint64) string {
+	if i == nil {
+		return "nil"
+	}
+	return fmt.Sprintf("%d", *i)
+}
+
 func LoadReplayorConfig(cliCtx *cli.Context, l log.Logger) (ReplayorConfig, error) {
 	jwtFile := cliCtx.String(EngineApiSecret.Name)
 	jwtBytes, err := ioutil.ReadFile(jwtFile)
@@ -55,6 +62,8 @@ func LoadReplayorConfig(cliCtx *cli.Context, l log.Logger) (ReplayorConfig, erro
 	if err != nil {
 		return ReplayorConfig{}, err
 	}
+
+	l.Info("activation", "canyon", valueOrNil(rollupCfg.CanyonTime), "delta", valueOrNil(rollupCfg.DeltaTime), "ecotone", valueOrNil(rollupCfg.EcotoneTime), "fjord", valueOrNil(rollupCfg.FjordTime))
 
 	hostname, err := os.Hostname()
 	if err != nil {
