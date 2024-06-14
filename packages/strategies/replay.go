@@ -2,7 +2,7 @@ package strategies
 
 import (
 	"context"
-	"errors"
+	"fmt"
 
 	"github.com/ethereum-optimism/optimism/op-service/eth"
 	"github.com/ethereum/go-ethereum/common"
@@ -33,7 +33,7 @@ func (o *OneForOne) BlockReceived(ctx context.Context, input *types.Block) *Bloc
 func (o *OneForOne) ValidateExecution(ctx context.Context, e *eth.ExecutionPayloadEnvelope, a BlockCreationParams) error {
 	expectedHash := a.validateInfo.(common.Hash)
 	if e.ExecutionPayload.BlockHash != expectedHash {
-		return errors.New("Block hash mismatch")
+		return fmt.Errorf("expected block hash %s, got %s", expectedHash.Hex(), e.ExecutionPayload.BlockHash.Hex())
 	}
 
 	return nil

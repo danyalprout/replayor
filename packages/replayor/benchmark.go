@@ -2,7 +2,6 @@ package replayor
 
 import (
 	"context"
-	"errors"
 	"math/big"
 	"sync"
 	"time"
@@ -130,7 +129,6 @@ func (r *Benchmark) addBlock(ctx context.Context, currentBlock strategies.BlockC
 	}
 
 	if r.rollupCfg.IsCanyon(uint64(currentBlock.Time)) {
-		l.Info("canyon detected", "time", currentBlock.Time)
 		attrs.Withdrawals = &types.Withdrawals{}
 	}
 
@@ -141,13 +139,11 @@ func (r *Benchmark) addBlock(ctx context.Context, currentBlock strategies.BlockC
 	fcuEnd := time.Now()
 
 	if err != nil {
-		l.Error("forkchoice update failed", "err", err)
-		panic(err)
+		l.Crit("forkchoice update failed", "err", err)
 	}
 
 	if result.PayloadStatus.Status != eth.ExecutionValid {
-		l.Error("forkchoice update failed", "status", result.PayloadStatus.Status)
-		panic(err)
+		l.Crit("forkchoice update failed", "status", result.PayloadStatus.Status)
 	}
 
 	stats.FCUTime = fcuEnd.Sub(startTime)
@@ -158,8 +154,7 @@ func (r *Benchmark) addBlock(ctx context.Context, currentBlock strategies.BlockC
 	})
 
 	if err != nil {
-		l.Error("get payload failed", "err", err)
-		panic(err)
+		l.Crit("get payload failed", "err", err, "payloadId", *result.PayloadID)
 	}
 
 	getTime := time.Now()
@@ -168,22 +163,19 @@ func (r *Benchmark) addBlock(ctx context.Context, currentBlock strategies.BlockC
 
 	err = r.strategy.ValidateExecution(ctx, envelope, currentBlock)
 	if err != nil {
-		l.Error("validation failed", "err", err)
-		panic(err)
+		l.Crit("validation failed", "err", err, "executionPayload", *envelope.ExecutionPayload, "parentBeaconBlockRoot", envelope.ParentBeaconBlockRoot)
 	}
 
 	status, err := r.clients.EngineApi.NewPayload(ctx, envelope.ExecutionPayload, envelope.ParentBeaconBlockRoot)
 	if err != nil {
-		l.Error("new payload failed", "err", err)
-		panic(err)
+		l.Crit("new payload failed", "err", err)
 	}
 
 	newEnd := time.Now()
 	stats.NewTime = newEnd.Sub(getTime)
 
 	if status.Status != eth.ExecutionValid {
-		l.Error("new payload failed", "status", status.Status)
-		panic(errors.New("invalid execution status"))
+		l.Crit("new payload failed", "status", status.Status)
 	}
 
 	state = &eth.ForkchoiceState{
@@ -194,19 +186,16 @@ func (r *Benchmark) addBlock(ctx context.Context, currentBlock strategies.BlockC
 
 	status2, err := r.clients.EngineApi.ForkchoiceUpdate(ctx, state, nil)
 	if err != nil {
-		l.Error("forkchoice update failed", "err", err)
-		panic(err)
+		l.Crit("forkchoice update failed", "err", err)
 	}
 
 	if status2.PayloadStatus.Status != eth.ExecutionValid {
-		l.Error("forkchoice update failed", "status", status2.PayloadStatus.Status)
-		panic(errors.New("invalid execution status"))
+		l.Crit("forkchoice update failed", "status", status2.PayloadStatus.Status)
 	}
 
 	err = r.strategy.ValidateBlock(ctx, envelope, currentBlock)
 	if err != nil {
-		l.Error("validation failed", "err", err)
-		panic(err)
+		l.Crit("validation failed", "err", err)
 	}
 
 	fcu2Time := time.Now()
