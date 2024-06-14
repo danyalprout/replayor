@@ -163,7 +163,12 @@ func (r *Benchmark) addBlock(ctx context.Context, currentBlock strategies.BlockC
 
 	err = r.strategy.ValidateExecution(ctx, envelope, currentBlock)
 	if err != nil {
-		l.Crit("validation failed", "err", err, "executionPayload", *envelope.ExecutionPayload, "parentBeaconBlockRoot", envelope.ParentBeaconBlockRoot)
+		txnHash := make([]common.Hash, len(txns))
+		for i, txn := range txns {
+			txnHash[i] = txn.Hash()
+		}
+
+		l.Crit("validation failed", "err", err, "executionPayload", *envelope.ExecutionPayload, "parentBeaconBlockRoot", envelope.ParentBeaconBlockRoot, "txnHashes", txnHash)
 	}
 
 	status, err := r.clients.EngineApi.NewPayload(ctx, envelope.ExecutionPayload, envelope.ParentBeaconBlockRoot)
