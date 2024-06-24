@@ -2,14 +2,14 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"os"
 
 	"github.com/danyalprout/replayor/packages/clients"
 	"github.com/danyalprout/replayor/packages/config"
-	"github.com/danyalprout/replayor/packages/replayor"
-	"github.com/danyalprout/replayor/packages/stats"
 	opservice "github.com/ethereum-optimism/optimism/op-service"
 	"github.com/ethereum-optimism/optimism/op-service/cliapp"
+	"github.com/ethereum-optimism/optimism/op-service/eth"
 	oplog "github.com/ethereum-optimism/optimism/op-service/log"
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/urfave/cli/v2"
@@ -49,12 +49,27 @@ func Main() cliapp.LifecycleAction {
 		c, err := clients.SetupClients(cfg, logger, ctx)
 
 		// Benchmark stats
-		s, err := stats.NewStorage(logger, cfg)
-		if err != nil {
-			return nil, err
-		}
-		statsRecorder := stats.NewStoredStats(s, logger)
+		//s, err := stats.NewStorage(logger, cfg)
+		//if err != nil {
+		//	return nil, err
+		//}
+		//statsRecorder := stats.NewStoredStats(s, logger)
 
-		return replayor.NewService(c, statsRecorder, cfg, logger), nil
+		latestBlock, err := c.DestNode.BlockByNumber(ctx, nil)
+		if err != nil {
+			panic(err)
+		}
+
+		state := &eth.ForkchoiceState{
+			HeadBlockHash:      latestBlock.Hash(),
+			SafeBlockHash:      latestBlock.Hash(),
+			FinalizedBlockHash: latestBlock.Hash(),
+		}
+
+		result, err := c.EngineApi.ForkchoiceUpdate(ctx, state, nil)
+		fmt.Println(result)
+		panic("hello")
+
+		//return replayor.NewService(c, statsRecorder, cfg, logger), nil
 	}
 }
