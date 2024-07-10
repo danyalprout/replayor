@@ -2,7 +2,6 @@ package config
 
 import (
 	"fmt"
-	"io/ioutil"
 	"os"
 	"strings"
 
@@ -44,7 +43,7 @@ func valueOrNil(i *uint64) string {
 
 func LoadReplayorConfig(cliCtx *cli.Context, l log.Logger) (ReplayorConfig, error) {
 	jwtFile := cliCtx.String(EngineApiSecret.Name)
-	jwtBytes, err := ioutil.ReadFile(jwtFile)
+	jwtBytes, err := os.ReadFile(jwtFile)
 	if err != nil {
 		return ReplayorConfig{}, err
 	}
