@@ -9,6 +9,6 @@ run:
 	docker-compose up	-d
 	docker-compose logs -f replayor
 
-initialize:
+init:
 	mkdir secret
 	openssl rand -hex 32 > secret/jwt
