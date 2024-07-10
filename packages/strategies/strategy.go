@@ -12,8 +12,9 @@ import (
 )
 
 const (
-	strategyTypeStress = "stress"
-	strategyTypeReplay = "replay"
+	strategyTypeStress    = "stress"
+	strategyTypeContracts = "contracts"
+	strategyTypeReplay    = "replay"
 )
 
 type BlockCreationParams struct {
@@ -36,6 +37,8 @@ func LoadStrategy(cfg config.ReplayorConfig, logger log.Logger, c clients.Client
 	switch cfg.Strategy {
 	case strategyTypeStress:
 		return NewStressTest(startBlock, logger, cfg, c)
+	case strategyTypeContracts:
+		return NewContractStressTest(startBlock, logger, cfg, c)
 	case strategyTypeReplay:
 		return &OneForOne{}
 	default:

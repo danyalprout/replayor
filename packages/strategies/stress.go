@@ -3,8 +3,8 @@ package strategies
 import (
 	"context"
 	"crypto/ecdsa"
-	"crypto/rand"
 	"math/big"
+	"math/rand"
 
 	"github.com/danyalprout/replayor/packages/clients"
 	"github.com/danyalprout/replayor/packages/config"
@@ -17,7 +17,7 @@ import (
 )
 
 var (
-	length = big.NewInt(10) // Generate number between 0 and 9
+	length = 10 // Generate number between 0 and 9
 
 	// Test private keys to make some fake txns from
 	privateKeyRaw = []string{
@@ -201,25 +201,18 @@ func (s *StressTest) packItUp(input *types.Block) types.Transactions {
 			break
 		}
 
-		from, err := rand.Int(rand.Reader, length)
-		if err != nil {
-			panic(err)
-		}
+		from := rand.Intn(length)
+		to := rand.Intn(length)
 
-		to, err := rand.Int(rand.Reader, length)
-		if err != nil {
-			panic(err)
-		}
-
-		if from.Cmp(to) == 0 {
+		if from == to {
 			continue
 		}
 
 		fillUp -= gasUsed
 
 		txn := types.NewTx(&types.DynamicFeeTx{
-			To:        &addresses[to.Int64()],
-			Nonce:     nonces[from.Int64()],
+			To:        &addresses[to],
+			Nonce:     nonces[from],
 			Value:     big.NewInt(100),
 			Gas:       gasUsed,
 			GasTipCap: gasInfo.GasTipCap(),
@@ -227,13 +220,13 @@ func (s *StressTest) packItUp(input *types.Block) types.Transactions {
 		})
 
 		signer := types.NewLondonSigner(big.NewInt(8453))
-		signedTx, err := types.SignTx(txn, signer, privateKey[from.Int64()])
+		signedTx, err := types.SignTx(txn, signer, privateKey[from])
 		if err != nil {
 			panic(err)
 		}
 
 		result = append(result, signedTx)
-		nonces[from.Int64()]++
+		nonces[from]++
 	}
 
 	return result
