@@ -84,7 +84,7 @@ var (
 		bytes: []byte{
 			0x55, // sstore
 		},
-		gas: 5000,
+		gas: 22100,
 	}
 
 	bodySegments = []ContractSegment{
@@ -199,7 +199,7 @@ func (s *ContractStressTest) packItUp(input *types.Block) types.Transactions {
 	gasInfo := input.Transactions()[len(input.Transactions())-1]
 
 	originTransactionUse := input.GasUsed()
-	targetUsage := input.GasLimit()
+	targetUsage := input.GasLimit() / 6
 
 	fillUp := targetUsage - originTransactionUse
 
@@ -226,7 +226,7 @@ func (s *ContractStressTest) packItUp(input *types.Block) types.Transactions {
 			Value:     big.NewInt(100),
 			Gas:       gasUsed,
 			GasTipCap: gasInfo.GasTipCap(),
-			GasFeeCap: gasInfo.GasFeeCap(),
+			GasFeeCap: input.BaseFee().Mul(input.BaseFee(), big.NewInt(5)),
 			Data:      data,
 		})
 
@@ -258,5 +258,5 @@ func generateContractData() ([]byte, uint64) {
 	data = append(data, tailSegment.bytes...)
 	gasEstimate += tailSegment.gas + uint64(16*len(tailSegment.bytes))
 
-	return data, gasEstimate
+	return data, gasEstimate + 40_000
 }
