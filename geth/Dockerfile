@@ -1,4 +1,4 @@
-FROM golang:1.21 as geth
+FROM golang:1.21 AS geth
 
 WORKDIR /app
 

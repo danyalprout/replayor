@@ -1,4 +1,5 @@
 .idea/
+.DS_Store
 geth-data-archive/
 geth-data/
 secret/

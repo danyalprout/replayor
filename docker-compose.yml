@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
 #  node: # this is Optimism's geth client w/ a patch to not reject txns as part of FCU
 #    build: ./geth
