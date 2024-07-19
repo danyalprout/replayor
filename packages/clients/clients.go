@@ -60,6 +60,10 @@ func SetupClients(cfg config.ReplayorConfig, logger log.Logger, ctx context.Cont
 		return engineApi, nil
 	})
 
+	if err != nil {
+		return Clients{}, err
+	}
+
 	return Clients{
 		SourceNode: sourceNode,
 		DestNode:   destNode,

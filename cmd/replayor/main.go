@@ -47,6 +47,9 @@ func Main() cliapp.LifecycleAction {
 		}
 
 		c, err := clients.SetupClients(cfg, logger, ctx)
+		if err != nil {
+			return nil, err
+		}
 
 		// Benchmark stats
 		s, err := stats.NewStorage(logger, cfg)
