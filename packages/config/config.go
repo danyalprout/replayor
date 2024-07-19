@@ -25,6 +25,7 @@ type ReplayorConfig struct {
 	GasTarget           int
 	GasLimit            int
 	BenchmarkStartBlock uint64
+	BenchmarkOpcodes    bool
 	TestName            string
 	Bucket              string
 	StorageType         string
@@ -82,6 +83,7 @@ func LoadReplayorConfig(cliCtx *cli.Context, l log.Logger) (ReplayorConfig, erro
 		GasTarget:           cliCtx.Int(GasTarget.Name),
 		GasLimit:            cliCtx.Int(GasLimit.Name),
 		BenchmarkStartBlock: cliCtx.Uint64(BenchmarkStartBlock.Name),
+		BenchmarkOpcodes:    cliCtx.Bool(BenchmarkOpcodes.Name),
 		TestName:            hostname,
 		Bucket:              cliCtx.String(S3Bucket.Name),
 		StorageType:         cliCtx.String(StorageType.Name),

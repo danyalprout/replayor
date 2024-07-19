@@ -82,4 +82,11 @@ type BlockCreationStats struct {
 	Success     float64
 	GasUsed     uint64
 	GasLimit    uint64
+
+	OpCodes map[string]OpCodeStats `json:",omitempty"`
+}
+
+type OpCodeStats struct {
+	Count int
+	Gas   uint64
 }

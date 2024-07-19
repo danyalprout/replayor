@@ -44,6 +44,8 @@ type Benchmark struct {
 	rollupCfg           *rollup.Config
 	startBlockNum       uint64
 	endBlockNum         uint64
+
+	benchmarkOpcodes bool
 }
 
 func (r *Benchmark) getBlockFromSourceNode(ctx context.Context, blockNum uint64) (*types.Block, error) {
@@ -225,9 +227,9 @@ func (r *Benchmark) addBlock(ctx context.Context, currentBlock strategies.BlockC
 	r.remainingBlockCount -= 1
 }
 
-func (r *Benchmark) enrich(ctx context.Context, stats *stats.BlockCreationStats) {
+func (r *Benchmark) enrich(ctx context.Context, s *stats.BlockCreationStats) {
 	receipts, err := retry.Do(ctx, 10, retry.Exponential(), func() ([]*types.Receipt, error) {
-		return r.clients.DestNode.BlockReceipts(ctx, rpc.BlockNumberOrHash{BlockHash: &stats.BlockHash})
+		return r.clients.DestNode.BlockReceipts(ctx, rpc.BlockNumberOrHash{BlockHash: &s.BlockHash})
 	})
 
 	if err != nil {
@@ -235,15 +237,66 @@ func (r *Benchmark) enrich(ctx context.Context, stats *stats.BlockCreationStats)
 	}
 
 	success := 0
-
 	for _, receipt := range receipts {
-		stats.GasUsed += receipt.GasUsed
 		if receipt.Status == types.ReceiptStatusSuccessful {
 			success += 1
 		}
 	}
+	s.Success = float64(success) / float64(len(receipts))
 
-	stats.Success = float64(success) / float64(len(receipts))
+	if r.benchmarkOpcodes {
+		s.OpCodes = make(map[string]stats.OpCodeStats)
+
+		for _, receipt := range receipts {
+			txTrace, err := retry.Do(ctx, 10, retry.Exponential(), func() (*TxTrace, error) {
+				var txTrace TxTrace
+				err := r.clients.DestNode.Client().Call(&txTrace, "debug_traceTransaction", receipt.TxHash, map[string]string{})
+				if err != nil {
+					return nil, err
+				}
+				return &txTrace, nil
+			})
+			if err != nil {
+				r.log.Warn("unable to load tx trace", "err", err)
+			}
+
+			var prevOpCode string
+			prevGas := txTrace.Gas
+			var gasUsage uint64
+			callStack := make([]string, 0, 1024)
+			for _, log := range txTrace.StructLogs {
+				prevDepth := uint64(len(callStack))
+				if log.Depth > prevDepth {
+					// track the caller opcode
+					callStack = append(callStack, prevOpCode)
+				} else if log.Depth < prevDepth {
+					// account for refunded call stack gas
+					caller := callStack[len(callStack)-1]
+					callStack = callStack[:len(callStack)-1]
+					s.OpCodes[caller] = stats.OpCodeStats{
+						Count: s.OpCodes[caller].Count + 1,
+						Gas:   s.OpCodes[caller].Gas + log.Gas - prevGas,
+					}
+					gasUsage += log.Gas - prevGas
+				} else {
+					s.OpCodes[prevOpCode] = stats.OpCodeStats{
+						Count: s.OpCodes[prevOpCode].Count + 1,
+						Gas:   s.OpCodes[prevOpCode].Gas + prevGas - log.Gas,
+					}
+					gasUsage += prevGas - log.Gas
+				}
+				prevOpCode = log.Op
+				prevGas = log.Gas
+			}
+
+			s.OpCodes["TRANSACTION"] = stats.OpCodeStats{
+				Count: s.OpCodes["TRANSACTION"].Count + 1,
+				Gas:   s.OpCodes["TRANSACTION"].Gas + receipt.GasUsed - gasUsage,
+			}
+
+			s.GasUsed += receipt.GasUsed
+		}
+	}
 }
 
 func (r *Benchmark) enrichAndRecordStats(ctx context.Context) {
@@ -351,7 +404,8 @@ func NewBenchmark(
 	strategy strategies.Strategy,
 	s stats.Stats,
 	currentBlock *types.Block,
-	benchmarkBlockCount uint64) *Benchmark {
+	benchmarkBlockCount uint64,
+	benchmarkOpcodes bool) *Benchmark {
 	r := &Benchmark{
 		clients:                   c,
 		rollupCfg:                 rollupCfg,
@@ -366,6 +420,7 @@ func NewBenchmark(
 		endBlockNum:               currentBlock.NumberU64() + 1 + benchmarkBlockCount,
 		remainingBlockCount:       benchmarkBlockCount,
 		previousReplayedBlockHash: currentBlock.Hash(),
+		benchmarkOpcodes:          benchmarkOpcodes,
 	}
 
 	return r
