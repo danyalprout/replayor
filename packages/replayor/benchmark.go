@@ -246,11 +246,15 @@ func (r *Benchmark) enrich(ctx context.Context, s *stats.BlockCreationStats) {
 
 	if r.benchmarkOpcodes {
 		s.OpCodes = make(map[string]stats.OpCodeStats)
+		tracerOptions := map[string]any{
+			"disableStack":   true,
+			"disableStorage": true,
+		}
 
 		for _, receipt := range receipts {
 			txTrace, err := retry.Do(ctx, 10, retry.Exponential(), func() (*TxTrace, error) {
 				var txTrace TxTrace
-				err := r.clients.DestNode.Client().Call(&txTrace, "debug_traceTransaction", receipt.TxHash, map[string]string{})
+				err := r.clients.DestNode.Client().Call(&txTrace, "debug_traceTransaction", receipt.TxHash, tracerOptions)
 				if err != nil {
 					return nil, err
 				}
@@ -258,6 +262,11 @@ func (r *Benchmark) enrich(ctx context.Context, s *stats.BlockCreationStats) {
 			})
 			if err != nil {
 				r.log.Warn("unable to load tx trace", "err", err)
+				s.OpCodes["UNKNOWN"] = stats.OpCodeStats{
+					Count: s.OpCodes["UNKNOWN"].Count + 1,
+					Gas:   s.OpCodes["UNKNOWN"].Gas + receipt.GasUsed,
+				}
+				continue
 			}
 
 			var prevOpCode string
