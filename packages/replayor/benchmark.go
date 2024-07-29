@@ -240,71 +240,13 @@ func (r *Benchmark) enrich(ctx context.Context, s *stats.BlockCreationStats) {
 	for _, receipt := range receipts {
 		if receipt.Status == types.ReceiptStatusSuccessful {
 			success += 1
+			s.GasUsed += receipt.GasUsed
 		}
 	}
 	s.Success = float64(success) / float64(len(receipts))
 
 	if r.benchmarkOpcodes {
-		s.OpCodes = make(map[string]stats.OpCodeStats)
-		tracerOptions := map[string]any{
-			"disableStack":   true,
-			"disableStorage": true,
-		}
-
-		for _, receipt := range receipts {
-			txTrace, err := retry.Do(ctx, 10, retry.Exponential(), func() (*TxTrace, error) {
-				var txTrace TxTrace
-				err := r.clients.DestNode.Client().Call(&txTrace, "debug_traceTransaction", receipt.TxHash, tracerOptions)
-				if err != nil {
-					return nil, err
-				}
-				return &txTrace, nil
-			})
-			if err != nil {
-				r.log.Warn("unable to load tx trace", "err", err)
-				s.OpCodes["UNKNOWN"] = stats.OpCodeStats{
-					Count: s.OpCodes["UNKNOWN"].Count + 1,
-					Gas:   s.OpCodes["UNKNOWN"].Gas + receipt.GasUsed,
-				}
-				continue
-			}
-
-			var prevOpCode string
-			prevGas := txTrace.Gas
-			var gasUsage uint64
-			callStack := make([]string, 0, 1024)
-			for _, log := range txTrace.StructLogs {
-				prevDepth := uint64(len(callStack))
-				if log.Depth > prevDepth {
-					// track the caller opcode
-					callStack = append(callStack, prevOpCode)
-				} else if log.Depth < prevDepth {
-					// account for refunded call stack gas
-					caller := callStack[len(callStack)-1]
-					callStack = callStack[:len(callStack)-1]
-					s.OpCodes[caller] = stats.OpCodeStats{
-						Count: s.OpCodes[caller].Count + 1,
-						Gas:   s.OpCodes[caller].Gas + log.Gas - prevGas,
-					}
-					gasUsage += log.Gas - prevGas
-				} else {
-					s.OpCodes[prevOpCode] = stats.OpCodeStats{
-						Count: s.OpCodes[prevOpCode].Count + 1,
-						Gas:   s.OpCodes[prevOpCode].Gas + prevGas - log.Gas,
-					}
-					gasUsage += prevGas - log.Gas
-				}
-				prevOpCode = log.Op
-				prevGas = log.Gas
-			}
-
-			s.OpCodes["TRANSACTION"] = stats.OpCodeStats{
-				Count: s.OpCodes["TRANSACTION"].Count + 1,
-				Gas:   s.OpCodes["TRANSACTION"].Gas + receipt.GasUsed - gasUsage,
-			}
-
-			s.GasUsed += receipt.GasUsed
-		}
+		r.computeTraceStats(ctx, s, receipts)
 	}
 }
 
