@@ -54,6 +54,7 @@ func (r *Benchmark) traceReceipt(ctx context.Context, receipt *types.Receipt, op
 	}
 
 	var gasUsage uint64
+	var gasRefund uint64
 	for idx, log := range txTrace.StructLogs {
 		opGas := log.GasCost
 
@@ -71,9 +72,8 @@ func (r *Benchmark) traceReceipt(ctx context.Context, receipt *types.Receipt, op
 		}
 
 		gasUsage += opGas
+		gasRefund = log.Refund
 	}
-
-	gasRefund := txTrace.StructLogs[len(txTrace.StructLogs)-1].Refund
 
 	opCodes["REFUND"] = stats.OpCodeStats{
 		Count: opCodes["REFUND"].Count + 1,
