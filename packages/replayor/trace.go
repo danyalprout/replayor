@@ -62,8 +62,12 @@ func (r *Benchmark) traceReceipt(ctx context.Context, receipt *types.Receipt, op
 		if idx < len(txTrace.StructLogs)-1 {
 			nextLog = &txTrace.StructLogs[idx+1]
 		}
-		if nextLog != nil && log.Depth < nextLog.Depth {
-			opGas = log.GasCost - nextLog.Gas
+		if nextLog != nil {
+			if log.Depth < nextLog.Depth {
+				opGas = log.GasCost - nextLog.Gas
+			} else if log.Depth == nextLog.Depth {
+				opGas = log.Gas - nextLog.Gas
+			}
 		}
 
 		opCodes[log.Op] = stats.OpCodeStats{
