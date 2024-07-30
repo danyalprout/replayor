@@ -36,6 +36,21 @@ func (r *Benchmark) computeTraceStats(ctx context.Context, s *stats.BlockCreatio
 }
 
 func (r *Benchmark) traceReceipt(ctx context.Context, receipt *types.Receipt, opCodes map[string]stats.OpCodeStats) {
+	tx, err := retry.Do(ctx, 10, retry.Exponential(), func() (*types.Transaction, error) {
+		tx, _, err := r.clients.DestNode.TransactionByHash(ctx, receipt.TxHash)
+		return tx, err
+	})
+	if err != nil {
+		r.log.Warn("unable to load tx", "err", err)
+		opCodes["UNKNOWN"] = stats.OpCodeStats{
+			Count: opCodes["UNKNOWN"].Count + 1,
+			Gas:   opCodes["UNKNOWN"].Gas + receipt.GasUsed,
+		}
+		return
+	}
+
+	gasLimit := tx.Gas()
+
 	txTrace, err := retry.Do(ctx, 10, retry.Exponential(), func() (*TxTrace, error) {
 		var txTrace TxTrace
 		err := r.clients.DestNode.Client().Call(&txTrace, "debug_traceTransaction", receipt.TxHash, tracerOptions)
@@ -53,8 +68,19 @@ func (r *Benchmark) traceReceipt(ctx context.Context, receipt *types.Receipt, op
 		return
 	}
 
-	var gasUsage uint64
+	gasUsage := txTrace.Gas
+
+	if len(txTrace.StructLogs) > 0 {
+		gasUsage = gasLimit - txTrace.StructLogs[0].Gas
+	}
+
+	opCodes["TRANSACTION"] = stats.OpCodeStats{
+		Count: opCodes["TRANSACTION"].Count + 1,
+		Gas:   opCodes["TRANSACTION"].Gas + gasUsage,
+	}
+
 	var gasRefund uint64
+
 	for idx, log := range txTrace.StructLogs {
 		opGas := log.GasCost
 
@@ -75,19 +101,11 @@ func (r *Benchmark) traceReceipt(ctx context.Context, receipt *types.Receipt, op
 			Gas:   opCodes[log.Op].Gas + opGas,
 		}
 
-		gasUsage += opGas
 		gasRefund = log.Refund
 	}
 
 	opCodes["REFUND"] = stats.OpCodeStats{
 		Count: opCodes["REFUND"].Count + 1,
 		Gas:   opCodes["REFUND"].Gas + gasRefund,
-	}
-
-	gasUsage -= gasRefund
-
-	opCodes["TRANSACTION"] = stats.OpCodeStats{
-		Count: opCodes["TRANSACTION"].Count + 1,
-		Gas:   opCodes["TRANSACTION"].Gas + receipt.GasUsed - gasUsage,
 	}
 }
