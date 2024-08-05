@@ -66,7 +66,7 @@ func (r *Benchmark) loadBlocks(ctx context.Context) {
 		for i := uint64(0); i < concurrency; i++ {
 			blockNum := blockStartRange + i
 
-			go func(index uint64) {
+			go func(index, blockNum uint64) {
 				defer wg.Done()
 
 				block, err := r.getBlockFromSourceNode(ctx, blockNum)
@@ -81,7 +81,7 @@ func (r *Benchmark) loadBlocks(ctx context.Context) {
 				m.Lock()
 				results[index] = block
 				m.Unlock()
-			}(i)
+			}(i, blockNum)
 		}
 
 		wg.Wait()
