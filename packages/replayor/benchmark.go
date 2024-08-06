@@ -246,9 +246,7 @@ func (r *Benchmark) enrich(ctx context.Context, s *stats.BlockCreationStats) {
 	}
 	s.Success = float64(success) / float64(len(receipts))
 
-	if r.benchmarkOpcodes {
-		r.computeTraceStats(ctx, s, receipts)
-	}
+	r.computeTraceStats(ctx, s, receipts)
 }
 
 func (r *Benchmark) enrichAndRecordStats(ctx context.Context) chan any {

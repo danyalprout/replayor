@@ -27,12 +27,35 @@ var tracerOptions = map[string]any{
 	"disableStorage": true,
 }
 
-func (r *Benchmark) computeTraceStats(ctx context.Context, s *stats.BlockCreationStats, receipts []*types.Receipt) {
-	s.OpCodes = make(map[string]stats.OpCodeStats)
+type StorageTrace struct {
+	TxHash string `json:"txHash"`
+	Result struct {
+		Post map[string]StorageAccountChange `json:"post"`
+	} `json:"result"`
+}
 
-	for _, receipt := range receipts {
-		r.traceReceipt(ctx, receipt, s.OpCodes)
+type StorageAccountChange struct {
+	Balance string            `json:"balance"`
+	Nonce   uint64            `json:"nonce"`
+	Storage map[string]string `json:"storage"`
+}
+
+var storageTracerOptions = map[string]any{
+	"tracer": "prestateTracer",
+	"tracerConfig": map[string]any{
+		"diffMode": true,
+	},
+}
+
+func (r *Benchmark) computeTraceStats(ctx context.Context, s *stats.BlockCreationStats, receipts []*types.Receipt) {
+	if r.benchmarkOpcodes {
+		s.OpCodes = make(map[string]stats.OpCodeStats)
+
+		for _, receipt := range receipts {
+			r.traceReceipt(ctx, receipt, s.OpCodes)
+		}
 	}
+	r.recordStorageChanges(ctx, s)
 }
 
 func (r *Benchmark) traceReceipt(ctx context.Context, receipt *types.Receipt, opCodes map[string]stats.OpCodeStats) {
@@ -107,5 +130,46 @@ func (r *Benchmark) traceReceipt(ctx context.Context, receipt *types.Receipt, op
 	opCodes["REFUND"] = stats.OpCodeStats{
 		Count: opCodes["REFUND"].Count + 1,
 		Gas:   opCodes["REFUND"].Gas + gasRefund,
+	}
+}
+
+func (r *Benchmark) recordStorageChanges(ctx context.Context, s *stats.BlockCreationStats) {
+	storageTraces, err := retry.Do(ctx, 3, retry.Exponential(), func() ([]StorageTrace, error) {
+		var storageTraces []StorageTrace
+		err := r.clients.DestNode.Client().Call(&storageTraces, "debug_traceBlockByHash", s.BlockHash, storageTracerOptions)
+		if err != nil {
+			return nil, err
+		}
+		return storageTraces, nil
+	})
+	if err != nil {
+		r.log.Warn("unable to load block storage trace", "err", err)
+		return
+	}
+
+	var mergedTrace StorageTrace
+	mergedTrace.Result.Post = make(map[string]StorageAccountChange)
+
+	for _, storageTrace := range storageTraces {
+		for account, storage := range storageTrace.Result.Post {
+			if _, ok := mergedTrace.Result.Post[account]; !ok {
+				mergedTrace.Result.Post[account] = StorageAccountChange{
+					Storage: make(map[string]string),
+				}
+			}
+			for slot, value := range storage.Storage {
+				mergedTrace.Result.Post[account].Storage[slot] = value
+			}
+		}
+	}
+
+	s.AccountsChanged = uint64(len(mergedTrace.Result.Post))
+	s.StorageTriesChanged = 0
+	s.SlotsChanged = 0
+	for _, storage := range mergedTrace.Result.Post {
+		s.SlotsChanged += uint64(len(storage.Storage))
+		if len(storage.Storage) > 0 {
+			s.StorageTriesChanged++
+		}
 	}
 }

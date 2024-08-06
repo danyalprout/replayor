@@ -83,7 +83,10 @@ type BlockCreationStats struct {
 	GasUsed     uint64
 	GasLimit    uint64
 
-	OpCodes map[string]OpCodeStats `json:",omitempty"`
+	OpCodes             map[string]OpCodeStats `json:",omitempty"`
+	AccountsChanged     uint64                 `json:",omitempty"`
+	StorageTriesChanged uint64                 `json:",omitempty"`
+	SlotsChanged        uint64                 `json:",omitempty"`
 }
 
 type OpCodeStats struct {
