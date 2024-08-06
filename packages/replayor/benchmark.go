@@ -66,7 +66,7 @@ func (r *Benchmark) loadBlocks(ctx context.Context) {
 		for i := uint64(0); i < concurrency; i++ {
 			blockNum := blockStartRange + i
 
-			go func(index uint64) {
+			go func(index, blockNum uint64) {
 				defer wg.Done()
 
 				block, err := r.getBlockFromSourceNode(ctx, blockNum)
@@ -81,7 +81,7 @@ func (r *Benchmark) loadBlocks(ctx context.Context) {
 				m.Lock()
 				results[index] = block
 				m.Unlock()
-			}(i)
+			}(i, blockNum)
 		}
 
 		wg.Wait()
@@ -221,6 +221,7 @@ func (r *Benchmark) addBlock(ctx context.Context, currentBlock strategies.BlockC
 
 	if r.remainingBlockCount == 0 {
 		r.log.Info("finished processing blocks")
+		r.recordStats.Close()
 		return
 	}
 
@@ -240,74 +241,33 @@ func (r *Benchmark) enrich(ctx context.Context, s *stats.BlockCreationStats) {
 	for _, receipt := range receipts {
 		if receipt.Status == types.ReceiptStatusSuccessful {
 			success += 1
+			s.GasUsed += receipt.GasUsed
 		}
 	}
 	s.Success = float64(success) / float64(len(receipts))
 
 	if r.benchmarkOpcodes {
-		s.OpCodes = make(map[string]stats.OpCodeStats)
-
-		for _, receipt := range receipts {
-			txTrace, err := retry.Do(ctx, 10, retry.Exponential(), func() (*TxTrace, error) {
-				var txTrace TxTrace
-				err := r.clients.DestNode.Client().Call(&txTrace, "debug_traceTransaction", receipt.TxHash, map[string]string{})
-				if err != nil {
-					return nil, err
-				}
-				return &txTrace, nil
-			})
-			if err != nil {
-				r.log.Warn("unable to load tx trace", "err", err)
-			}
-
-			var prevOpCode string
-			prevGas := txTrace.Gas
-			var gasUsage uint64
-			callStack := make([]string, 0, 1024)
-			for _, log := range txTrace.StructLogs {
-				prevDepth := uint64(len(callStack))
-				if log.Depth > prevDepth {
-					// track the caller opcode
-					callStack = append(callStack, prevOpCode)
-				} else if log.Depth < prevDepth {
-					// account for refunded call stack gas
-					caller := callStack[len(callStack)-1]
-					callStack = callStack[:len(callStack)-1]
-					s.OpCodes[caller] = stats.OpCodeStats{
-						Count: s.OpCodes[caller].Count + 1,
-						Gas:   s.OpCodes[caller].Gas + log.Gas - prevGas,
-					}
-					gasUsage += log.Gas - prevGas
-				} else {
-					s.OpCodes[prevOpCode] = stats.OpCodeStats{
-						Count: s.OpCodes[prevOpCode].Count + 1,
-						Gas:   s.OpCodes[prevOpCode].Gas + prevGas - log.Gas,
-					}
-					gasUsage += prevGas - log.Gas
-				}
-				prevOpCode = log.Op
-				prevGas = log.Gas
-			}
-
-			s.OpCodes["TRANSACTION"] = stats.OpCodeStats{
-				Count: s.OpCodes["TRANSACTION"].Count + 1,
-				Gas:   s.OpCodes["TRANSACTION"].Gas + receipt.GasUsed - gasUsage,
-			}
-
-			s.GasUsed += receipt.GasUsed
-		}
+		r.computeTraceStats(ctx, s, receipts)
 	}
 }
 
-func (r *Benchmark) enrichAndRecordStats(ctx context.Context) {
+func (r *Benchmark) enrichAndRecordStats(ctx context.Context) chan any {
+	var wg sync.WaitGroup
+	wg.Add(5)
 	for i := 0; i < 5; i++ {
 		go func() {
+			defer wg.Done()
 			for {
 				select {
-				case stats := <-r.recordStats.Out():
+				case stats, ok := <-r.recordStats.Out():
+					if !ok {
+						return
+					}
 					r.enrich(ctx, &stats)
 
+					r.sm.Lock()
 					r.s.RecordBlockStats(stats)
+					r.sm.Unlock()
 
 					r.log.Debug("block stats", "BlockNumber", stats.BlockNumber, "BlockHash", stats.BlockHash, "TxnCount", stats.TxnCount, "TotalTime", stats.TotalTime, "FCUTime", stats.FCUTime, "GetTime", stats.GetTime, "NewTime", stats.NewTime, "FCUNoAttrsTime", stats.FCUNoAttrsTime, "Success", stats.Success, "GasUsed", stats.GasUsed, "GasLimit", stats.GasLimit)
 				case <-ctx.Done():
@@ -316,6 +276,15 @@ func (r *Benchmark) enrichAndRecordStats(ctx context.Context) {
 			}
 		}()
 	}
+
+	doneChan := make(chan any)
+
+	go func() {
+		wg.Wait()
+		close(doneChan)
+	}()
+
+	return doneChan
 }
 
 func (r *Benchmark) submitBlocks(ctx context.Context) {
@@ -360,7 +329,7 @@ func (r *Benchmark) Run(ctx context.Context) {
 	go r.loadBlocks(ctx)
 	go r.mapBlocks(ctx)
 	go r.submitBlocks(ctx)
-	r.enrichAndRecordStats(ctx)
+	doneChan := r.enrichAndRecordStats(ctx)
 
 	ticker := time.NewTicker(1 * time.Second)
 	defer ticker.Stop()
@@ -371,6 +340,10 @@ func (r *Benchmark) Run(ctx context.Context) {
 
 	for {
 		select {
+		case <-doneChan:
+			r.log.Info("writing block stats")
+			r.s.Write(ctx)
+			return
 		case <-ticker.C:
 			currentBlock, err := r.clients.DestNode.BlockByNumber(ctx, nil)
 			if err != nil {
@@ -380,15 +353,6 @@ func (r *Benchmark) Run(ctx context.Context) {
 			l.Info("replay progress", "blocks", currentBlock.NumberU64()-lastBlockNum, "incomingBlocks", len(r.incomingBlocks), "processBlocks", len(r.processBlocks), "currentBlock", currentBlock.NumberU64(), "statProgress", r.recordStats.Len(), "remaining", r.remainingBlockCount)
 
 			lastBlockNum = currentBlock.NumberU64()
-
-			r.sm.Lock()
-			rc := r.remainingBlockCount
-			r.sm.Unlock()
-
-			if rc == 0 {
-				r.s.Write(ctx)
-				return
-			}
 		case <-ctx.Done():
 			return
 		}

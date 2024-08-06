@@ -4,11 +4,14 @@ import (
 	"context"
 	"errors"
 	"sync/atomic"
+	"time"
 
 	"github.com/danyalprout/replayor/packages/clients"
 	"github.com/danyalprout/replayor/packages/config"
 	"github.com/danyalprout/replayor/packages/stats"
 	"github.com/danyalprout/replayor/packages/strategies"
+	"github.com/ethereum-optimism/optimism/op-service/eth"
+	"github.com/ethereum-optimism/optimism/op-service/retry"
 	"github.com/ethereum/go-ethereum/log"
 )
 
@@ -40,6 +43,22 @@ func (r *Service) Start(ctx context.Context) error {
 	if err != nil {
 		panic(err)
 	}
+
+	retry.Do(ctx, 720, retry.Fixed(10*time.Second), func() (bool, error) {
+		result, err := r.clients.EngineApi.ForkchoiceUpdate(ctx, &eth.ForkchoiceState{
+			HeadBlockHash:      currentBlock.Hash(),
+			SafeBlockHash:      currentBlock.Hash(),
+			FinalizedBlockHash: currentBlock.Hash(),
+		}, nil)
+		if err != nil {
+			r.log.Info("waiting for engine API to stop syncing", "err", err)
+			return false, err
+		} else if result.PayloadStatus.Status != eth.ExecutionValid {
+			r.log.Info("waiting for execution API to stop syncing", "status", result.PayloadStatus.Status)
+			return false, errors.New("syncing")
+		}
+		return true, nil
+	})
 
 	if r.cfg.BenchmarkStartBlock != 0 {
 		if currentBlock.NumberU64() < r.cfg.BenchmarkStartBlock {
