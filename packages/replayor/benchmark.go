@@ -249,7 +249,7 @@ func (r *Benchmark) enrich(ctx context.Context, s *stats.BlockCreationStats) {
 	r.computeTraceStats(ctx, s, receipts)
 }
 
-func (r *Benchmark) enrichAndRecordStats(ctx context.Context) chan any {
+func (r *Benchmark) enrichAndRecordStats(ctx context.Context) {
 	var wg sync.WaitGroup
 	wg.Add(5)
 	for i := 0; i < 5; i++ {
@@ -274,24 +274,16 @@ func (r *Benchmark) enrichAndRecordStats(ctx context.Context) chan any {
 			}
 		}()
 	}
-
-	doneChan := make(chan any)
-
-	go func() {
-		wg.Wait()
-		close(doneChan)
-	}()
-
-	return doneChan
+	wg.Wait()
 }
 
 func (r *Benchmark) submitBlocks(ctx context.Context) {
 	for {
 		select {
-		case block := <-r.processBlocks:
-			if block.Number > r.endBlockNum {
+		case block, ok := <-r.processBlocks:
+			if block.Number > r.endBlockNum || !ok {
 				r.log.Debug("stopping block processing")
-				continue
+				return
 			}
 
 			r.addBlock(ctx, block)
@@ -304,9 +296,13 @@ func (r *Benchmark) submitBlocks(ctx context.Context) {
 func (r *Benchmark) mapBlocks(ctx context.Context) {
 	for {
 		select {
-		case b := <-r.incomingBlocks:
-			if b == nil {
+		case b, ok := <-r.incomingBlocks:
+			if !ok {
 				r.log.Debug("stopping block processing")
+				close(r.processBlocks)
+				return
+			} else if b == nil {
+				r.log.Debug("nil block received")
 				continue
 			}
 
@@ -324,10 +320,14 @@ func (r *Benchmark) mapBlocks(ctx context.Context) {
 }
 
 func (r *Benchmark) Run(ctx context.Context) {
+	doneChan := make(chan any)
 	go r.loadBlocks(ctx)
 	go r.mapBlocks(ctx)
-	go r.submitBlocks(ctx)
-	doneChan := r.enrichAndRecordStats(ctx)
+	go func() {
+		r.submitBlocks(ctx)
+		r.enrichAndRecordStats(ctx)
+		close(doneChan)
+	}()
 
 	ticker := time.NewTicker(1 * time.Second)
 	defer ticker.Stop()
