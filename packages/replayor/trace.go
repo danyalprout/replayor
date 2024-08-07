@@ -59,7 +59,7 @@ func (r *Benchmark) computeTraceStats(ctx context.Context, s *stats.BlockCreatio
 }
 
 func (r *Benchmark) traceReceipt(ctx context.Context, receipt *types.Receipt, opCodes map[string]stats.OpCodeStats) {
-	tx, err := retry.Do(ctx, 10, retry.Exponential(), func() (*types.Transaction, error) {
+	tx, err := retry.Do(ctx, 3, retry.Exponential(), func() (*types.Transaction, error) {
 		tx, _, err := r.clients.DestNode.TransactionByHash(ctx, receipt.TxHash)
 		return tx, err
 	})
@@ -74,7 +74,7 @@ func (r *Benchmark) traceReceipt(ctx context.Context, receipt *types.Receipt, op
 
 	gasLimit := tx.Gas()
 
-	txTrace, err := retry.Do(ctx, 10, retry.Exponential(), func() (*TxTrace, error) {
+	txTrace, err := retry.Do(ctx, 5, retry.Exponential(), func() (*TxTrace, error) {
 		var txTrace TxTrace
 		err := r.clients.DestNode.Client().Call(&txTrace, "debug_traceTransaction", receipt.TxHash, tracerOptions)
 		if err != nil {

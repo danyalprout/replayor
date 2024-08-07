@@ -218,7 +218,7 @@ func (r *Benchmark) addBlock(ctx context.Context, currentBlock strategies.BlockC
 }
 
 func (r *Benchmark) enrich(ctx context.Context, s *stats.BlockCreationStats) {
-	receipts, err := retry.Do(ctx, 10, retry.Exponential(), func() ([]*types.Receipt, error) {
+	receipts, err := retry.Do(ctx, 3, retry.Exponential(), func() ([]*types.Receipt, error) {
 		return r.clients.DestNode.BlockReceipts(ctx, rpc.BlockNumberOrHash{BlockHash: &s.BlockHash})
 	})
 
@@ -239,31 +239,23 @@ func (r *Benchmark) enrich(ctx context.Context, s *stats.BlockCreationStats) {
 }
 
 func (r *Benchmark) enrichAndRecordStats(ctx context.Context) {
-	var wg sync.WaitGroup
-	wg.Add(5)
-	for i := 0; i < 5; i++ {
-		go func() {
-			defer wg.Done()
-			for {
-				select {
-				case stats, ok := <-r.recordStats.Out():
-					if !ok {
-						return
-					}
-					r.enrich(ctx, &stats)
-
-					r.sm.Lock()
-					r.s.RecordBlockStats(stats)
-					r.sm.Unlock()
-
-					r.log.Debug("block stats", "BlockNumber", stats.BlockNumber, "BlockHash", stats.BlockHash, "TxnCount", stats.TxnCount, "TotalTime", stats.TotalTime, "FCUTime", stats.FCUTime, "GetTime", stats.GetTime, "NewTime", stats.NewTime, "FCUNoAttrsTime", stats.FCUNoAttrsTime, "Success", stats.Success, "GasUsed", stats.GasUsed, "GasLimit", stats.GasLimit)
-				case <-ctx.Done():
-					return
-				}
+	for {
+		select {
+		case stats, ok := <-r.recordStats.Out():
+			if !ok {
+				return
 			}
-		}()
+			r.enrich(ctx, &stats)
+
+			r.sm.Lock()
+			r.s.RecordBlockStats(stats)
+			r.sm.Unlock()
+
+			r.log.Debug("block stats", "BlockNumber", stats.BlockNumber, "BlockHash", stats.BlockHash, "TxnCount", stats.TxnCount, "TotalTime", stats.TotalTime, "FCUTime", stats.FCUTime, "GetTime", stats.GetTime, "NewTime", stats.NewTime, "FCUNoAttrsTime", stats.FCUNoAttrsTime, "Success", stats.Success, "GasUsed", stats.GasUsed, "GasLimit", stats.GasLimit)
+		case <-ctx.Done():
+			return
+		}
 	}
-	wg.Wait()
 }
 
 func (r *Benchmark) submitBlocks(ctx context.Context) {
