@@ -30,11 +30,12 @@ var tracerOptions = map[string]any{
 type StorageTrace struct {
 	TxHash string `json:"txHash"`
 	Result struct {
-		Post map[string]StorageAccountChange `json:"post"`
+		Pre  map[string]StorageAccountState `json:"pre"`
+		Post map[string]StorageAccountState `json:"post"`
 	} `json:"result"`
 }
 
-type StorageAccountChange struct {
+type StorageAccountState struct {
 	Balance string            `json:"balance"`
 	Nonce   uint64            `json:"nonce"`
 	Storage map[string]string `json:"storage"`
@@ -148,12 +149,23 @@ func (r *Benchmark) recordStorageChanges(ctx context.Context, s *stats.BlockCrea
 	}
 
 	var mergedTrace StorageTrace
-	mergedTrace.Result.Post = make(map[string]StorageAccountChange)
+	mergedTrace.Result.Pre = make(map[string]StorageAccountState)
+	mergedTrace.Result.Post = make(map[string]StorageAccountState)
 
 	for _, storageTrace := range storageTraces {
+		for account, storage := range storageTrace.Result.Pre {
+			if _, ok := mergedTrace.Result.Pre[account]; !ok {
+				mergedTrace.Result.Pre[account] = StorageAccountState{
+					Storage: make(map[string]string),
+				}
+			}
+			for slot, value := range storage.Storage {
+				mergedTrace.Result.Pre[account].Storage[slot] = value
+			}
+		}
 		for account, storage := range storageTrace.Result.Post {
 			if _, ok := mergedTrace.Result.Post[account]; !ok {
-				mergedTrace.Result.Post[account] = StorageAccountChange{
+				mergedTrace.Result.Post[account] = StorageAccountState{
 					Storage: make(map[string]string),
 				}
 			}
@@ -166,10 +178,25 @@ func (r *Benchmark) recordStorageChanges(ctx context.Context, s *stats.BlockCrea
 	s.AccountsChanged = uint64(len(mergedTrace.Result.Post))
 	s.StorageTriesChanged = 0
 	s.SlotsChanged = 0
-	for _, storage := range mergedTrace.Result.Post {
-		s.SlotsChanged += uint64(len(storage.Storage))
-		if len(storage.Storage) > 0 {
-			s.StorageTriesChanged++
+
+	changedStorageTries := make(map[string]bool)
+
+	for address, storage := range mergedTrace.Result.Pre {
+		for slot := range storage.Storage {
+			// count deleted storage slots
+			if _, ok := mergedTrace.Result.Post[address].Storage[slot]; !ok {
+				s.SlotsChanged++
+				changedStorageTries[address] = true
+			}
 		}
 	}
+	for address, storage := range mergedTrace.Result.Post {
+		// count added/updated storage slots
+		s.SlotsChanged += uint64(len(storage.Storage))
+		if len(storage.Storage) > 0 {
+			changedStorageTries[address] = true
+		}
+	}
+
+	s.StorageTriesChanged = uint64(len(changedStorageTries))
 }
