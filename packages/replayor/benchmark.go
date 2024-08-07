@@ -17,7 +17,6 @@ import (
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/rpc"
-	"golang.design/x/chann"
 )
 
 const (
@@ -34,7 +33,7 @@ type Benchmark struct {
 
 	incomingBlocks chan *types.Block
 	processBlocks  chan strategies.BlockCreationParams
-	recordStats    *chann.Chann[stats.BlockCreationStats]
+	recordStats    chan stats.BlockCreationStats
 
 	previousReplayedBlockHash common.Hash
 	strategy                  strategies.Strategy
@@ -214,7 +213,7 @@ func (r *Benchmark) addBlock(ctx context.Context, currentBlock strategies.BlockC
 
 	r.previousReplayedBlockHash = envelope.ExecutionPayload.BlockHash
 
-	r.recordStats.In() <- stats
+	r.recordStats <- stats
 }
 
 func (r *Benchmark) enrich(ctx context.Context, s *stats.BlockCreationStats) {
@@ -239,23 +238,31 @@ func (r *Benchmark) enrich(ctx context.Context, s *stats.BlockCreationStats) {
 }
 
 func (r *Benchmark) enrichAndRecordStats(ctx context.Context) {
-	for {
-		select {
-		case stats, ok := <-r.recordStats.Out():
-			if !ok {
-				return
+	var wg sync.WaitGroup
+	wg.Add(5)
+	for i := 0; i < 5; i++ {
+		go func() {
+			defer wg.Done()
+			for {
+				select {
+				case stats, ok := <-r.recordStats:
+					if !ok {
+						return
+					}
+					r.enrich(ctx, &stats)
+
+					r.sm.Lock()
+					r.s.RecordBlockStats(stats)
+					r.sm.Unlock()
+
+					r.log.Debug("block stats", "BlockNumber", stats.BlockNumber, "BlockHash", stats.BlockHash, "TxnCount", stats.TxnCount, "TotalTime", stats.TotalTime, "FCUTime", stats.FCUTime, "GetTime", stats.GetTime, "NewTime", stats.NewTime, "FCUNoAttrsTime", stats.FCUNoAttrsTime, "Success", stats.Success, "GasUsed", stats.GasUsed, "GasLimit", stats.GasLimit)
+				case <-ctx.Done():
+					return
+				}
 			}
-			r.enrich(ctx, &stats)
-
-			r.sm.Lock()
-			r.s.RecordBlockStats(stats)
-			r.sm.Unlock()
-
-			r.log.Debug("block stats", "BlockNumber", stats.BlockNumber, "BlockHash", stats.BlockHash, "TxnCount", stats.TxnCount, "TotalTime", stats.TotalTime, "FCUTime", stats.FCUTime, "GetTime", stats.GetTime, "NewTime", stats.NewTime, "FCUNoAttrsTime", stats.FCUNoAttrsTime, "Success", stats.Success, "GasUsed", stats.GasUsed, "GasLimit", stats.GasLimit)
-		case <-ctx.Done():
-			return
-		}
+		}()
 	}
+	wg.Wait()
 }
 
 func (r *Benchmark) submitBlocks(ctx context.Context) {
@@ -264,7 +271,7 @@ func (r *Benchmark) submitBlocks(ctx context.Context) {
 		case block, ok := <-r.processBlocks:
 			if block.Number > r.endBlockNum || !ok {
 				r.log.Info("stopping block processing")
-				r.recordStats.Close()
+				close(r.recordStats)
 				return
 			}
 
@@ -331,7 +338,7 @@ func (r *Benchmark) Run(ctx context.Context) {
 				l.Error("unable to load current block", "err", err)
 			}
 
-			l.Info("replay progress", "blocks", currentBlock.NumberU64()-lastBlockNum, "incomingBlocks", len(r.incomingBlocks), "processBlocks", len(r.processBlocks), "currentBlock", currentBlock.NumberU64(), "statProgress", r.recordStats.Len(), "remaining", r.remainingBlockCount)
+			l.Info("replay progress", "blocks", currentBlock.NumberU64()-lastBlockNum, "incomingBlocks", len(r.incomingBlocks), "processBlocks", len(r.processBlocks), "currentBlock", currentBlock.NumberU64(), "statProgress", len(r.recordStats), "remaining", r.remainingBlockCount)
 
 			lastBlockNum = currentBlock.NumberU64()
 		case <-ctx.Done():
@@ -357,7 +364,7 @@ func NewBenchmark(
 		log:                       logger,
 		incomingBlocks:            make(chan *types.Block, 25),
 		processBlocks:             make(chan strategies.BlockCreationParams, 25),
-		recordStats:               chann.New[stats.BlockCreationStats](),
+		recordStats:               make(chan stats.BlockCreationStats, benchmarkBlockCount),
 		strategy:                  strategy,
 		s:                         s,
 		currentBlock:              currentBlock,
