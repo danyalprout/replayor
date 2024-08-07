@@ -69,7 +69,7 @@ func (r *Service) Start(ctx context.Context) error {
 				&strategies.OneForOne{},
 				&stats.NoOpStats{},
 				currentBlock,
-				r.cfg.BenchmarkStartBlock-currentBlock.NumberU64()-1,
+				r.cfg.BenchmarkStartBlock-currentBlock.NumberU64(),
 				false)
 
 			walkUpToBlock.Run(cCtx)
