@@ -215,17 +215,6 @@ func (r *Benchmark) addBlock(ctx context.Context, currentBlock strategies.BlockC
 	r.previousReplayedBlockHash = envelope.ExecutionPayload.BlockHash
 
 	r.recordStats.In() <- stats
-
-	r.sm.Lock()
-	defer r.sm.Unlock()
-
-	if r.remainingBlockCount == 0 {
-		r.log.Info("finished processing blocks")
-		r.recordStats.Close()
-		return
-	}
-
-	r.remainingBlockCount -= 1
 }
 
 func (r *Benchmark) enrich(ctx context.Context, s *stats.BlockCreationStats) {
@@ -282,11 +271,13 @@ func (r *Benchmark) submitBlocks(ctx context.Context) {
 		select {
 		case block, ok := <-r.processBlocks:
 			if block.Number > r.endBlockNum || !ok {
-				r.log.Debug("stopping block processing")
+				r.log.Info("stopping block processing")
+				r.recordStats.Close()
 				return
 			}
 
 			r.addBlock(ctx, block)
+			r.remainingBlockCount -= 1
 		case <-ctx.Done():
 			return
 		}
@@ -298,11 +289,11 @@ func (r *Benchmark) mapBlocks(ctx context.Context) {
 		select {
 		case b, ok := <-r.incomingBlocks:
 			if !ok {
-				r.log.Debug("stopping block processing")
+				r.log.Info("stopping block mapping")
 				close(r.processBlocks)
 				return
 			} else if b == nil {
-				r.log.Debug("nil block received")
+				r.log.Warn("nil block received")
 				continue
 			}
 
@@ -379,7 +370,7 @@ func NewBenchmark(
 		s:                         s,
 		currentBlock:              currentBlock,
 		startBlockNum:             currentBlock.NumberU64() + 1,
-		endBlockNum:               currentBlock.NumberU64() + 1 + benchmarkBlockCount,
+		endBlockNum:               currentBlock.NumberU64() + benchmarkBlockCount,
 		remainingBlockCount:       benchmarkBlockCount,
 		previousReplayedBlockHash: currentBlock.Hash(),
 		benchmarkOpcodes:          benchmarkOpcodes,
