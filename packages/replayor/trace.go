@@ -56,7 +56,10 @@ func (r *Benchmark) computeTraceStats(ctx context.Context, s *stats.BlockCreatio
 			r.traceReceipt(ctx, receipt, s.OpCodes)
 		}
 	}
-	r.recordStorageChanges(ctx, s)
+
+	if r.diffStorage {
+		r.recordStorageChanges(ctx, s)
+	}
 }
 
 func (r *Benchmark) traceReceipt(ctx context.Context, receipt *types.Receipt, opCodes map[string]stats.OpCodeStats) {

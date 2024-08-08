@@ -70,6 +70,7 @@ func (r *Service) Start(ctx context.Context) error {
 				&stats.NoOpStats{},
 				currentBlock,
 				r.cfg.BenchmarkStartBlock-currentBlock.NumberU64(),
+				false,
 				false)
 
 			walkUpToBlock.Run(cCtx)
@@ -94,7 +95,7 @@ func (r *Service) Start(ctx context.Context) error {
 		panic(err)
 	}
 
-	benchmark := NewBenchmark(r.clients, r.cfg.RollupConfig, r.log, strategy, r.stats, currentBlock, uint64(r.cfg.BlockCount), r.cfg.BenchmarkOpcodes)
+	benchmark := NewBenchmark(r.clients, r.cfg.RollupConfig, r.log, strategy, r.stats, currentBlock, uint64(r.cfg.BlockCount), r.cfg.BenchmarkOpcodes, true)
 	benchmark.Run(cCtx)
 
 	return nil
