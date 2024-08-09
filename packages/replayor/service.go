@@ -95,7 +95,7 @@ func (r *Service) Start(ctx context.Context) error {
 		panic(err)
 	}
 
-	benchmark := NewBenchmark(r.clients, r.cfg.RollupConfig, r.log, strategy, r.stats, currentBlock, uint64(r.cfg.BlockCount), r.cfg.BenchmarkOpcodes, true)
+	benchmark := NewBenchmark(r.clients, r.cfg.RollupConfig, r.log, strategy, r.stats, currentBlock, uint64(r.cfg.BlockCount), r.cfg.BenchmarkOpcodes, r.cfg.ComputeStorageDiffs)
 	benchmark.Run(cCtx)
 
 	return nil
