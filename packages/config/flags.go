@@ -77,6 +77,11 @@ var (
 		Usage:   "whether to include opcode metrics in the benchmark results",
 		EnvVars: opservice.PrefixEnvVar(EnvVarPrefix, "BENCHMARK_OPCODES"),
 	}
+	ComputeStorageDiffs = &cli.BoolFlag{
+		Name:    "compute-storage-diffs",
+		Usage:   "whether to include storage diff metrics in the benchmark results",
+		EnvVars: opservice.PrefixEnvVar(EnvVarPrefix, "COMPUTE_STORAGE_DIFFS"),
+	}
 	S3Bucket = &cli.StringFlag{
 		Name:     "s3-bucket",
 		Usage:    "The S3 bucket to store results in",
@@ -99,7 +104,7 @@ var (
 
 func init() {
 	Flags = append(Flags, oplog.CLIFlags(EnvVarPrefix)...)
-	Flags = append(Flags, EngineApiSecret, SourceNodeUrl, ChainId, EngineApiUrl, ExecutionUrl, Strategy, BlockCount, GasTarget, GasLimit, S3Bucket, StorageType, DiskPath, BenchmarkStartBlock, BenchmarkOpcodes, RollupConfigPath)
+	Flags = append(Flags, EngineApiSecret, SourceNodeUrl, ChainId, EngineApiUrl, ExecutionUrl, Strategy, BlockCount, GasTarget, GasLimit, S3Bucket, StorageType, DiskPath, BenchmarkStartBlock, BenchmarkOpcodes, ComputeStorageDiffs, RollupConfigPath)
 }
 
 // Flags contains the list of configuration options available to the binary.

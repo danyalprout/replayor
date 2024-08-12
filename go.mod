@@ -8,7 +8,6 @@ require (
 	github.com/ethereum/go-ethereum v1.13.15
 	github.com/minio/minio-go/v7 v7.0.70
 	github.com/urfave/cli/v2 v2.27.1
-	golang.design/x/chann v0.1.2
 )
 
 require (
