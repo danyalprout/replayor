@@ -92,7 +92,7 @@ func (r *Service) Start(ctx context.Context) error {
 	r.log.Info("Starting benchmark", "start_block", currentBlock.NumberU64())
 	strategy := strategies.LoadStrategy(r.cfg, r.log, r.clients, currentBlock)
 	if strategy == nil {
-		panic(err)
+		panic("failed to load strategy")
 	}
 
 	benchmark := NewBenchmark(r.clients, r.cfg.RollupConfig, r.log, strategy, r.stats, currentBlock, uint64(r.cfg.BlockCount), r.cfg.BenchmarkOpcodes, r.cfg.ComputeStorageDiffs)
