@@ -2,12 +2,7 @@
 
 This is a very rough, very WIP tool for replaying blocks on an op-stack network and outputting engine API timing information.
 
-It uses two forked components:
-
-* [optimism](https://github.com/ethereum-optimism/optimism/compare/develop...danyalprout:optimism:timeout-parameters?expand=1)
-  * Adds timeout parameters the engine API, allows us to capture how long outlier calls take.
-* [op-geth](https://github.com/ethereum-optimism/op-geth/compare/optimism...danyalprout:op-geth:danyal-wip?expand=1)
-  * Drops individual failed transactions from the block, instead of the whole block. This is necessary for replaying blocks with different parameters as some of the original transactions may fail due to the change in parameters.
+It uses a fork of [op-geth](https://github.com/ethereum-optimism/op-geth/compare/optimism...danyalprout:op-geth:danyal-wip?expand=1) which contains a hack to drop individual failed transactions from the block, instead of the whole block. This is necessary for replaying blocks with different parameters as some of the original transactions may fail due to the change in parameters.
 
 ### Run a test
 

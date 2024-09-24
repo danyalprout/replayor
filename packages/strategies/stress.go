@@ -130,7 +130,7 @@ func (s *StressTest) modifyTransactions(input *types.Block, transactions types.T
 
 		val, ok := new(big.Int).SetString("100000000000000000000", 10)
 		if !ok {
-			panic(err)
+			panic("failed to convert string to big.Int")
 		}
 
 		dep.SourceHash = source.SourceHash()
