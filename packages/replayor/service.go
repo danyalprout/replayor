@@ -24,14 +24,16 @@ type Service struct {
 	stats           stats.Stats
 	cfg             config.ReplayorConfig
 	log             log.Logger
+	close           context.CancelCauseFunc
 }
 
-func NewService(c clients.Clients, s stats.Stats, cfg config.ReplayorConfig, l log.Logger) *Service {
+func NewService(c clients.Clients, s stats.Stats, cfg config.ReplayorConfig, l log.Logger, close context.CancelCauseFunc) *Service {
 	return &Service{
 		clients: c,
 		stats:   s,
 		cfg:     cfg,
 		log:     l,
+		close:   close,
 	}
 }
 
@@ -98,6 +100,8 @@ func (r *Service) Start(ctx context.Context) error {
 	benchmark := NewBenchmark(r.clients, r.cfg.RollupConfig, r.log, strategy, r.stats, currentBlock, uint64(r.cfg.BlockCount), r.cfg.BenchmarkOpcodes, r.cfg.ComputeStorageDiffs)
 	benchmark.Run(cCtx)
 
+	// shutdown the whole application
+	r.close(nil)
 	return nil
 }
 
