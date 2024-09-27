@@ -58,6 +58,6 @@ func Main() cliapp.LifecycleAction {
 		}
 		statsRecorder := stats.NewStoredStats(s, logger)
 
-		return replayor.NewService(c, statsRecorder, cfg, logger), nil
+		return replayor.NewService(c, statsRecorder, cfg, logger, close), nil
 	}
 }
