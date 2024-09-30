@@ -21,6 +21,7 @@ type Clients struct {
 }
 
 func SetupClients(cfg config.ReplayorConfig, logger log.Logger, ctx context.Context) (Clients, error) {
+	logger.Info("dialing source node url", "url", cfg.SourceNodeUrl)
 	sourceNode, err := ethclient.Dial(cfg.SourceNodeUrl)
 	if err != nil {
 		return Clients{}, err
@@ -28,6 +29,7 @@ func SetupClients(cfg config.ReplayorConfig, logger log.Logger, ctx context.Cont
 
 	// Add some retries around connecting to the dest node as it starts up at the same time as the replayor
 	destNode, err := retry.Do(ctx, 120, retry.Fixed(time.Second), func() (*ethclient.Client, error) {
+		logger.Info("dialing destination node url", "url", cfg.ExecutionUrl)
 		d, e := ethclient.Dial(cfg.ExecutionUrl)
 		if e != nil {
 			logger.Info("waiting for geth (exec) to start")
@@ -35,7 +37,6 @@ func SetupClients(cfg config.ReplayorConfig, logger log.Logger, ctx context.Cont
 
 		return d, e
 	})
-
 	if err != nil {
 		return Clients{}, err
 	}
@@ -49,6 +50,7 @@ func SetupClients(cfg config.ReplayorConfig, logger log.Logger, ctx context.Cont
 
 	// Add some retries around connecting to the dest node as it starts up at the same time as the replayor
 	engineApi, err := retry.Do(ctx, 120, retry.Fixed(time.Second), func() (*sources.EngineAPIClient, error) {
+		logger.Info("dialing destination engine api url", "url", cfg.EngineApiUrl)
 		l2Node, err := client.NewRPC(ctx, logger, cfg.EngineApiUrl, opts...)
 		if err != nil {
 			logger.Info("waiting for geth (rpc) to start")
@@ -59,7 +61,6 @@ func SetupClients(cfg config.ReplayorConfig, logger log.Logger, ctx context.Cont
 
 		return engineApi, nil
 	})
-
 	if err != nil {
 		return Clients{}, err
 	}
