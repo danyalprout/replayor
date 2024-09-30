@@ -11,7 +11,7 @@ const EnvVarPrefix = "REPLAYOR"
 var (
 	EngineApiSecret = &cli.StringFlag{
 		Name:     "engine-api-secret",
-		Usage:    "The path to the engine api secret",
+		Usage:    "Engine api secret",
 		Required: true,
 		EnvVars:  opservice.PrefixEnvVar(EnvVarPrefix, "ENGINE_API_SECRET"),
 	}

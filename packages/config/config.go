@@ -44,13 +44,12 @@ func valueOrNil(i *uint64) string {
 }
 
 func LoadReplayorConfig(cliCtx *cli.Context, l log.Logger) (ReplayorConfig, error) {
-	jwtFile := cliCtx.String(EngineApiSecret.Name)
-	jwtBytes, err := os.ReadFile(jwtFile)
-	if err != nil {
-		return ReplayorConfig{}, err
+	secret := cliCtx.String(EngineApiSecret.Name)
+	if secret == "" {
+		return ReplayorConfig{}, fmt.Errorf("must provide REPLAYOR_ENGINE_API_SECRET env var")
 	}
 
-	secret := common.HexToHash(strings.TrimSpace(string(jwtBytes)))
+	secretHash := common.HexToHash(strings.TrimSpace(secret))
 
 	chainId := cliCtx.String(ChainId.Name)
 	rollupCfgPath := cliCtx.String(RollupConfigPath.Name)
@@ -72,7 +71,7 @@ func LoadReplayorConfig(cliCtx *cli.Context, l log.Logger) (ReplayorConfig, erro
 	}
 
 	return ReplayorConfig{
-		EngineApiSecret:     secret,
+		EngineApiSecret:     secretHash,
 		SourceNodeUrl:       cliCtx.String(SourceNodeUrl.Name),
 		ChainId:             chainId,
 		RollupConfig:        rollupCfg,
