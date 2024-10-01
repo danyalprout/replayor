@@ -38,6 +38,7 @@ func NewService(c clients.Clients, s stats.Stats, cfg config.ReplayorConfig, l l
 }
 
 func (r *Service) Start(ctx context.Context) error {
+	r.log.Info("starting replayor service")
 	cCtx, cancelFunc := context.WithCancel(ctx)
 	r.benchmarkCancel = cancelFunc
 
@@ -45,6 +46,7 @@ func (r *Service) Start(ctx context.Context) error {
 	if err != nil {
 		panic(err)
 	}
+	r.log.Info("retrieved current block number", "blockNum", currentBlock.Number())
 
 	retry.Do(ctx, 720, retry.Fixed(10*time.Second), func() (bool, error) {
 		result, err := r.clients.EngineApi.ForkchoiceUpdate(ctx, &eth.ForkchoiceState{
