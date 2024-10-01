@@ -71,6 +71,7 @@ func (r *Benchmark) loadBlocks(ctx context.Context) {
 
 				block, err := r.getBlockFromSourceNode(ctx, blockNum)
 				if err != nil {
+					r.log.Error("failed to getBlockFromSourceNode", "blockNum", blockNum)
 					panic(err)
 				}
 
@@ -154,7 +155,6 @@ func (r *Benchmark) addBlock(ctx context.Context, currentBlock strategies.BlockC
 		ID:        *result.PayloadID,
 		Timestamp: uint64(currentBlock.Time),
 	})
-
 	if err != nil {
 		l.Crit("get payload failed", "err", err, "payloadId", *result.PayloadID)
 	}
@@ -222,7 +222,6 @@ func (r *Benchmark) enrich(ctx context.Context, s *stats.BlockCreationStats) {
 	receipts, err := retry.Do(ctx, 3, retry.Exponential(), func() ([]*types.Receipt, error) {
 		return r.clients.DestNode.BlockReceipts(ctx, rpc.BlockNumberOrHash{BlockHash: &s.BlockHash})
 	})
-
 	if err != nil {
 		r.log.Warn("unable to load receipts", "err", err)
 	}
@@ -279,7 +278,6 @@ func (r *Benchmark) mapBlocks(ctx context.Context) {
 			return
 		}
 	}
-
 }
 
 func (r *Benchmark) Run(ctx context.Context) {
@@ -308,6 +306,7 @@ func (r *Benchmark) Run(ctx context.Context) {
 			currentBlock, err := r.clients.DestNode.BlockByNumber(ctx, nil)
 			if err != nil {
 				l.Error("unable to load current block", "err", err)
+				continue
 			}
 
 			l.Info("replay progress", "blocks", currentBlock.NumberU64()-lastBlockNum, "incomingBlocks", len(r.incomingBlocks), "processBlocks", len(r.processBlocks), "currentBlock", currentBlock.NumberU64(), "remaining", r.remainingBlockCount)
@@ -330,7 +329,8 @@ func NewBenchmark(
 	currentBlock *types.Block,
 	benchmarkBlockCount uint64,
 	benchmarkOpcodes bool,
-	diffStorage bool) *Benchmark {
+	diffStorage bool,
+) *Benchmark {
 	r := &Benchmark{
 		clients:                   c,
 		rollupCfg:                 rollupCfg,
