@@ -5,3 +5,4 @@ geth-data/
 secret/
 results/
 reth-data/
+*.crt
