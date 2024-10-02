@@ -2,6 +2,7 @@ package config
 
 import (
 	"fmt"
+	"math/big"
 	"os"
 	"strings"
 
@@ -15,14 +16,14 @@ import (
 type ReplayorConfig struct {
 	EngineApiSecret     common.Hash
 	SourceNodeUrl       string
-	ChainId             string
+	ChainId             *big.Int
 	RollupConfig        *rollup.Config
 	EngineApiUrl        string
 	ExecutionUrl        string
 	Strategy            string
 	BlockCount          int
-	GasTarget           int
-	GasLimit            int
+	GasTarget           uint64
+	GasLimit            uint64
 	BenchmarkStartBlock uint64
 	BenchmarkOpcodes    bool
 	ComputeStorageDiffs bool
@@ -70,17 +71,23 @@ func LoadReplayorConfig(cliCtx *cli.Context, l log.Logger) (ReplayorConfig, erro
 		return ReplayorConfig{}, err
 	}
 
+	gasLimit := cliCtx.Uint64(GasLimit.Name)
+	gasTarget := cliCtx.Uint64(GasTarget.Name)
+	if gasTarget > gasLimit {
+		return ReplayorConfig{}, fmt.Errorf("cannot set gasTarget greater than gasLimit")
+	}
+
 	return ReplayorConfig{
 		EngineApiSecret:     secretHash,
 		SourceNodeUrl:       cliCtx.String(SourceNodeUrl.Name),
-		ChainId:             chainId,
+		ChainId:             rollupCfg.L2ChainID,
 		RollupConfig:        rollupCfg,
 		EngineApiUrl:        cliCtx.String(EngineApiUrl.Name),
 		ExecutionUrl:        cliCtx.String(ExecutionUrl.Name),
 		Strategy:            cliCtx.String(Strategy.Name),
 		BlockCount:          cliCtx.Int(BlockCount.Name),
-		GasTarget:           cliCtx.Int(GasTarget.Name),
-		GasLimit:            cliCtx.Int(GasLimit.Name),
+		GasTarget:           gasTarget,
+		GasLimit:            gasLimit,
 		BenchmarkStartBlock: cliCtx.Uint64(BenchmarkStartBlock.Name),
 		BenchmarkOpcodes:    cliCtx.Bool(BenchmarkOpcodes.Name),
 		ComputeStorageDiffs: cliCtx.Bool(ComputeStorageDiffs.Name),
