@@ -17,8 +17,6 @@ import (
 )
 
 var (
-	length = big.NewInt(10) // Generate number between 0 and 9
-
 	// Test private keys to make some fake txns from
 	privateKeyRaw = []string{
 		"80c67f24f604d6dfd5c473781ef9b8680bdc2fbfa73a3370a7ade44a9225e965", // 0x1282BEd9E883442a0119c575D0Dfef608929fB40
@@ -49,6 +47,7 @@ var (
 	}
 
 	nonces = []uint64{}
+	length = big.NewInt(int64(len(addresses))) // Generate number between 0 and 9
 )
 
 func init() {
@@ -98,6 +97,8 @@ func (s *StressTest) modifyTransactions(input *types.Block, transactions types.T
 		panic(err)
 	}
 
+	originalTxNum := len(transactions)
+
 	result := types.Transactions{}
 
 	depositTxns := types.Transactions{}
@@ -130,7 +131,7 @@ func (s *StressTest) modifyTransactions(input *types.Block, transactions types.T
 
 		val, ok := new(big.Int).SetString("100000000000000000000", 10)
 		if !ok {
-			panic("failed to convert string to big.Int")
+			panic("big.Int SetString failed")
 		}
 
 		dep.SourceHash = source.SourceHash()
@@ -150,13 +151,17 @@ func (s *StressTest) modifyTransactions(input *types.Block, transactions types.T
 
 	result = append(result, depositTxns...)
 	result = append(result, userTxns...)
+	finalTxNum := len(result)
+
+	s.logger.Info("tx count", "blockNum", input.NumberU64(), "original", originalTxNum, "final", finalTxNum)
+
 	return result
 }
 
 func (s *StressTest) BlockReceived(ctx context.Context, input *types.Block) *BlockCreationParams {
-	gl := eth.Uint64Quantity(s.cfg.GasLimit)
-
 	txns := s.modifyTransactions(input, input.Transactions())
+
+	gl := eth.Uint64Quantity(s.cfg.GasLimit)
 
 	return &BlockCreationParams{
 		Number:       input.NumberU64(),
@@ -179,25 +184,25 @@ func (s *StressTest) ValidateBlock(ctx context.Context, e *eth.ExecutionPayloadE
 	return nil
 }
 
+// Adds new eth transfer txs to the block until the target gas usage is met
 func (s *StressTest) packItUp(input *types.Block) types.Transactions {
 	gasInfo := input.Transactions()[len(input.Transactions())-1]
 
-	originTransactionUse := input.GasUsed()
-	targetUsage := originTransactionUse * 2
+	originalGasUsed := input.GasUsed()
+	targetUsage := s.cfg.GasTarget
 
-	fillUp := targetUsage - originTransactionUse
+	fillUpRemaining := targetUsage - originalGasUsed
+	s.logger.Info("gas used", "blockNum", input.NumberU64(), "original", originalGasUsed, "target", targetUsage)
 
 	result := types.Transactions{}
 
-	if fillUp <= 0 {
+	if fillUpRemaining <= 0 {
 		return result
 	}
 
-	fillUp = uint64(float64(fillUp) * 0.75)
-
 	for {
 		gasUsed := uint64(21_000)
-		if fillUp < gasUsed {
+		if fillUpRemaining < gasUsed {
 			break
 		}
 
@@ -215,18 +220,18 @@ func (s *StressTest) packItUp(input *types.Block) types.Transactions {
 			continue
 		}
 
-		fillUp -= gasUsed
+		fillUpRemaining -= gasUsed
 
 		txn := types.NewTx(&types.DynamicFeeTx{
 			To:        &addresses[to.Int64()],
 			Nonce:     nonces[from.Int64()],
-			Value:     big.NewInt(100),
+			Value:     big.NewInt(1),
 			Gas:       gasUsed,
 			GasTipCap: gasInfo.GasTipCap(),
 			GasFeeCap: gasInfo.GasFeeCap(),
 		})
 
-		signer := types.NewLondonSigner(big.NewInt(8453))
+		signer := types.NewLondonSigner(s.cfg.ChainId)
 		signedTx, err := types.SignTx(txn, signer, privateKey[from.Int64()])
 		if err != nil {
 			panic(err)
