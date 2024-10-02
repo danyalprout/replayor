@@ -24,6 +24,7 @@ type BlockCreationParams struct {
 	MixDigest    eth.Bytes32
 	BeaconRoot   *common.Hash
 	FeeRecipient common.Address
+	Withdrawals  types.Withdrawals
 	validateInfo interface{}
 }
 

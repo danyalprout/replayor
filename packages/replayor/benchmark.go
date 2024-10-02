@@ -127,10 +127,7 @@ func (r *Benchmark) addBlock(ctx context.Context, currentBlock strategies.BlockC
 		GasLimit:              currentBlock.GasLimit,
 		PrevRandao:            currentBlock.MixDigest,
 		ParentBeaconBlockRoot: currentBlock.BeaconRoot,
-	}
-
-	if r.rollupCfg.IsCanyon(uint64(currentBlock.Time)) {
-		attrs.Withdrawals = &types.Withdrawals{}
+		Withdrawals:           &currentBlock.Withdrawals,
 	}
 
 	startTime := time.Now()
