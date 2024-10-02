@@ -38,7 +38,6 @@ type Benchmark struct {
 	previousReplayedBlockHash common.Hash
 	strategy                  strategies.Strategy
 
-	sm                  sync.Mutex
 	remainingBlockCount uint64
 	rollupCfg           *rollup.Config
 	startBlockNum       uint64
@@ -71,7 +70,7 @@ func (r *Benchmark) loadBlocks(ctx context.Context) {
 
 				block, err := r.getBlockFromSourceNode(ctx, blockNum)
 				if err != nil {
-					r.log.Error("failed to getBlockFromSourceNode", "blockNum", blockNum)
+					r.log.Error("failed to getBlockFromSourceNode", "blockNum", blockNum, "err", err)
 					panic(err)
 				}
 
@@ -135,6 +134,8 @@ func (r *Benchmark) addBlock(ctx context.Context, currentBlock strategies.BlockC
 		attrs.Withdrawals = &types.Withdrawals{}
 	}
 
+	var totalTime time.Duration
+
 	startTime := time.Now()
 
 	result, err := r.clients.EngineApi.ForkchoiceUpdate(ctx, state, attrs)
@@ -150,6 +151,7 @@ func (r *Benchmark) addBlock(ctx context.Context, currentBlock strategies.BlockC
 	}
 
 	stats.FCUTime = fcuEnd.Sub(startTime)
+	totalTime += stats.FCUTime
 
 	envelope, err := r.clients.EngineApi.GetPayload(ctx, eth.PayloadInfo{
 		ID:        *result.PayloadID,
@@ -160,8 +162,8 @@ func (r *Benchmark) addBlock(ctx context.Context, currentBlock strategies.BlockC
 	}
 
 	getTime := time.Now()
-
 	stats.GetTime = getTime.Sub(fcuEnd)
+	totalTime += stats.GetTime
 
 	err = r.strategy.ValidateExecution(ctx, envelope, currentBlock)
 	if err != nil {
@@ -173,13 +175,15 @@ func (r *Benchmark) addBlock(ctx context.Context, currentBlock strategies.BlockC
 		l.Crit("validation failed", "err", err, "executionPayload", *envelope.ExecutionPayload, "parentBeaconBlockRoot", envelope.ParentBeaconBlockRoot, "txnHashes", txnHash)
 	}
 
+	newStart := time.Now()
 	status, err := r.clients.EngineApi.NewPayload(ctx, envelope.ExecutionPayload, envelope.ParentBeaconBlockRoot)
 	if err != nil {
 		l.Crit("new payload failed", "err", err)
 	}
 
 	newEnd := time.Now()
-	stats.NewTime = newEnd.Sub(getTime)
+	stats.NewTime = newEnd.Sub(newStart)
+	totalTime += stats.NewTime
 
 	if status.Status != eth.ExecutionValid {
 		l.Crit("new payload failed", "status", status.Status)
@@ -191,13 +195,13 @@ func (r *Benchmark) addBlock(ctx context.Context, currentBlock strategies.BlockC
 		FinalizedBlockHash: envelope.ExecutionPayload.BlockHash,
 	}
 
-	status2, err := r.clients.EngineApi.ForkchoiceUpdate(ctx, state, nil)
+	fcu2status, err := r.clients.EngineApi.ForkchoiceUpdate(ctx, state, nil)
 	if err != nil {
 		l.Crit("forkchoice update failed", "err", err)
 	}
 
-	if status2.PayloadStatus.Status != eth.ExecutionValid {
-		l.Crit("forkchoice update failed", "status", status2.PayloadStatus.Status)
+	if fcu2status.PayloadStatus.Status != eth.ExecutionValid {
+		l.Crit("forkchoice update failed", "status", fcu2status.PayloadStatus.Status)
 	}
 
 	err = r.strategy.ValidateBlock(ctx, envelope, currentBlock)
@@ -206,15 +210,18 @@ func (r *Benchmark) addBlock(ctx context.Context, currentBlock strategies.BlockC
 	}
 
 	fcu2Time := time.Now()
-
 	stats.FCUNoAttrsTime = fcu2Time.Sub(newEnd)
-	stats.TotalTime = fcu2Time.Sub(startTime)
+	totalTime += stats.FCUNoAttrsTime
+
+	stats.TotalTime = totalTime
 	stats.BlockNumber = uint64(envelope.ExecutionPayload.BlockNumber)
 	stats.BlockHash = envelope.ExecutionPayload.BlockHash
 
 	r.previousReplayedBlockHash = envelope.ExecutionPayload.BlockHash
 
 	r.enrich(ctx, &stats)
+	l.Info("block stats", "blockNum", stats.BlockNumber, "gasUsed", stats.GasUsed, "txCount", stats.TxnCount)
+
 	r.s.RecordBlockStats(stats)
 }
 
@@ -224,13 +231,14 @@ func (r *Benchmark) enrich(ctx context.Context, s *stats.BlockCreationStats) {
 	})
 	if err != nil {
 		r.log.Warn("unable to load receipts", "err", err)
+		return
 	}
 
 	success := 0
 	for _, receipt := range receipts {
+		s.GasUsed += receipt.GasUsed
 		if receipt.Status == types.ReceiptStatusSuccessful {
 			success += 1
-			s.GasUsed += receipt.GasUsed
 		}
 	}
 	s.Success = float64(success) / float64(len(receipts))
