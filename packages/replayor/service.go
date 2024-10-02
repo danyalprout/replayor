@@ -70,6 +70,7 @@ func (r *Service) Start(ctx context.Context) error {
 				r.clients,
 				r.cfg.RollupConfig,
 				r.log,
+				// strategies.NewStressTest(currentBlock, r.log, r.cfg, r.clients),
 				&strategies.OneForOne{},
 				&stats.NoOpStats{},
 				currentBlock,
@@ -96,7 +97,7 @@ func (r *Service) Start(ctx context.Context) error {
 	r.log.Info("Starting benchmark", "start_block", currentBlock.NumberU64())
 	strategy := strategies.LoadStrategy(r.cfg, r.log, r.clients, currentBlock)
 	if strategy == nil {
-		panic("failed to load strategy")
+		panic("could not load strategy")
 	}
 
 	benchmark := NewBenchmark(r.clients, r.cfg.RollupConfig, r.log, strategy, r.stats, currentBlock, uint64(r.cfg.BlockCount), r.cfg.BenchmarkOpcodes, r.cfg.ComputeStorageDiffs)
