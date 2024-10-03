@@ -6,7 +6,6 @@ replace github.com/ethereum/go-ethereum v1.14.8 => github.com/ethereum-optimism/
 
 require (
 	github.com/ethereum-optimism/optimism v1.9.3-0.20240924125057-0fee34b645ca
-	github.com/ethereum-optimism/optimism/op-bindings v0.10.14
 	github.com/ethereum/go-ethereum v1.14.8
 	github.com/minio/minio-go/v7 v7.0.76
 	github.com/urfave/cli/v2 v2.27.4
