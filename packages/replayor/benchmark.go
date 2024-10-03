@@ -220,7 +220,7 @@ func (r *Benchmark) addBlock(ctx context.Context, currentBlock strategies.BlockC
 	r.previousReplayedBlockHash = envelope.ExecutionPayload.BlockHash
 
 	r.enrich(ctx, &stats)
-	l.Info("block stats", "blockNum", stats.BlockNumber, "gasUsed", stats.GasUsed, "txCount", stats.TxnCount)
+	l.Info("block stats", "totalTime", stats.TotalTime, "gasUsed", stats.GasUsed, "txCount", stats.TxnCount)
 
 	r.s.RecordBlockStats(stats)
 }
@@ -307,7 +307,6 @@ func (r *Benchmark) Run(ctx context.Context) {
 	for {
 		select {
 		case <-doneChan:
-			r.log.Info("writing block stats")
 			r.s.Write(ctx)
 			return
 		case <-ticker.C:
@@ -318,8 +317,13 @@ func (r *Benchmark) Run(ctx context.Context) {
 			}
 
 			l.Info("replay progress", "blocks", currentBlock.NumberU64()-lastBlockNum, "incomingBlocks", len(r.incomingBlocks), "processBlocks", len(r.processBlocks), "currentBlock", currentBlock.NumberU64(), "remaining", r.remainingBlockCount)
-
 			lastBlockNum = currentBlock.NumberU64()
+
+			// Periodically write to disk to save progress in case test is interrupted
+			lastBlockWritten := r.s.GetLastBlockWritten()
+			if lastBlockNum-lastBlockWritten >= 100 {
+				r.s.Write(ctx)
+			}
 		case <-ctx.Done():
 			return
 		}
