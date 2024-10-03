@@ -21,6 +21,8 @@ func blockToCreationParams(input *types.Block) BlockCreationParams {
 		Time:         eth.Uint64Quantity(input.Time()),
 		MixDigest:    eth.Bytes32(input.MixDigest()),
 		BeaconRoot:   input.BeaconRoot(),
+		FeeRecipient: input.Coinbase(),
+		Withdrawals:  input.Withdrawals(),
 		validateInfo: input.Hash(),
 	}
 }

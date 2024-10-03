@@ -23,6 +23,8 @@ type BlockCreationParams struct {
 	Time         eth.Uint64Quantity
 	MixDigest    eth.Bytes32
 	BeaconRoot   *common.Hash
+	FeeRecipient common.Address
+	Withdrawals  types.Withdrawals
 	validateInfo interface{}
 }
 

@@ -10,7 +10,6 @@ import (
 	"github.com/danyalprout/replayor/packages/clients"
 	"github.com/danyalprout/replayor/packages/stats"
 	"github.com/danyalprout/replayor/packages/strategies"
-	"github.com/ethereum-optimism/optimism/op-bindings/predeploys"
 	"github.com/ethereum-optimism/optimism/op-node/rollup"
 	"github.com/ethereum-optimism/optimism/op-service/eth"
 	"github.com/ethereum-optimism/optimism/op-service/retry"
@@ -123,15 +122,12 @@ func (r *Benchmark) addBlock(ctx context.Context, currentBlock strategies.BlockC
 	attrs := &eth.PayloadAttributes{
 		Timestamp:             currentBlock.Time,
 		NoTxPool:              true,
-		SuggestedFeeRecipient: predeploys.SequencerFeeVaultAddr,
+		SuggestedFeeRecipient: currentBlock.FeeRecipient,
 		Transactions:          txnData,
 		GasLimit:              currentBlock.GasLimit,
 		PrevRandao:            currentBlock.MixDigest,
 		ParentBeaconBlockRoot: currentBlock.BeaconRoot,
-	}
-
-	if r.rollupCfg.IsCanyon(uint64(currentBlock.Time)) {
-		attrs.Withdrawals = &types.Withdrawals{}
+		Withdrawals:           &currentBlock.Withdrawals,
 	}
 
 	startTime := time.Now()
