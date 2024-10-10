@@ -53,6 +53,12 @@ func (r *Benchmark) getBlockFromSourceNode(ctx context.Context, blockNum uint64)
 	})
 }
 
+func (r *Benchmark) getLatestBlockFromDestNode(ctx context.Context) (*types.Block, error) {
+	return retry.Do(ctx, 10, retry.Exponential(), func() (*types.Block, error) {
+		return r.clients.DestNode.BlockByNumber(ctx, nil)
+	})
+}
+
 func (r *Benchmark) loadBlocks(ctx context.Context) {
 	for blockStartRange := r.startBlockNum; blockStartRange <= r.endBlockNum; blockStartRange += concurrency {
 		results := make([]*types.Block, concurrency)
@@ -97,6 +103,7 @@ func (r *Benchmark) loadBlocks(ctx context.Context) {
 
 func (r *Benchmark) addBlock(ctx context.Context, currentBlock strategies.BlockCreationParams) {
 	l := r.log.New("source", "add-block", "block", currentBlock.Number)
+	l.Info("processing new block")
 
 	stats := stats.BlockCreationStats{}
 
@@ -199,6 +206,9 @@ func (r *Benchmark) addBlock(ctx context.Context, currentBlock strategies.BlockC
 	if err != nil {
 		l.Crit("forkchoice update failed", "err", err)
 	}
+	fcu2Time := time.Now()
+	stats.FCUNoAttrsTime = fcu2Time.Sub(newEnd)
+	totalTime += stats.FCUNoAttrsTime
 
 	if fcu2status.PayloadStatus.Status != eth.ExecutionValid {
 		l.Crit("forkchoice update failed", "status", fcu2status.PayloadStatus.Status)
@@ -208,10 +218,6 @@ func (r *Benchmark) addBlock(ctx context.Context, currentBlock strategies.BlockC
 	if err != nil {
 		l.Crit("validation failed", "err", err)
 	}
-
-	fcu2Time := time.Now()
-	stats.FCUNoAttrsTime = fcu2Time.Sub(newEnd)
-	totalTime += stats.FCUNoAttrsTime
 
 	stats.TotalTime = totalTime
 	stats.BlockNumber = uint64(envelope.ExecutionPayload.BlockNumber)
@@ -264,11 +270,11 @@ func (r *Benchmark) submitBlocks(ctx context.Context) {
 }
 
 func (r *Benchmark) mapBlocks(ctx context.Context) {
+	defer r.log.Info("stopping block mapping")
 	for {
 		select {
 		case b, ok := <-r.incomingBlocks:
 			if !ok {
-				r.log.Info("stopping block mapping")
 				close(r.processBlocks)
 				return
 			} else if b == nil {
@@ -289,6 +295,7 @@ func (r *Benchmark) mapBlocks(ctx context.Context) {
 }
 
 func (r *Benchmark) Run(ctx context.Context) {
+	r.log.Info("benchmark run initiated")
 	doneChan := make(chan any)
 	go r.loadBlocks(ctx)
 	go r.mapBlocks(ctx)
@@ -310,10 +317,10 @@ func (r *Benchmark) Run(ctx context.Context) {
 			r.s.Write(ctx)
 			return
 		case <-ticker.C:
-			currentBlock, err := r.clients.DestNode.BlockByNumber(ctx, nil)
+			currentBlock, err := r.getLatestBlockFromDestNode(ctx)
 			if err != nil {
-				l.Error("unable to load current block", "err", err)
-				continue
+				r.log.Error("unable to load current block from dest node", "err", err)
+				panic(err)
 			}
 
 			l.Info("replay progress", "blocks", currentBlock.NumberU64()-lastBlockNum, "incomingBlocks", len(r.incomingBlocks), "processBlocks", len(r.processBlocks), "currentBlock", currentBlock.NumberU64(), "remaining", r.remainingBlockCount)
