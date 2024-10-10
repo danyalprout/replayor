@@ -5,6 +5,7 @@ import (
 	"crypto/ecdsa"
 	"crypto/rand"
 	"math/big"
+	"sync"
 
 	"github.com/danyalprout/replayor/packages/clients"
 	"github.com/danyalprout/replayor/packages/config"
@@ -17,59 +18,27 @@ import (
 )
 
 var (
-	// Test private keys to make some fake txns from
-	privateKeyRaw = []string{
-		"80c67f24f604d6dfd5c473781ef9b8680bdc2fbfa73a3370a7ade44a9225e965", // 0x1282BEd9E883442a0119c575D0Dfef608929fB40
-		"097a1ba66d00d218dc09d9f23d9b41a5a7400c032472b78246aa47485ed7add8", // 0x24e998fF764D4938010FdC63D2c7F44b1B3B69d1
-		"8df8c356a846c7bd2d93d9364f05d984aec76823a46b8addf5b783a498625855", // 0xDEa3a7Ac8a26da5dd464Fb87d845062b05881648
-		"2f8e7f4f18044a956103dc285f1ac5691f9b487f9847e493d290b303c8cf105d", // 0x43463b7579113C90e32b0781Eba9A8C1983c7D0B
-		"fa99ac6eea2366efe47557eaea12ea5c813050dd4b4f7761e59db2b33a692132", // 0x3879e21DBf8cd4F408D337893335b4C7f093d326
-		"a0d9d7f16cd95808963ade84c95962aeddae45cfc89f0dce68d1e21a3334c74c", // 0xCc76B0A858779510F65a51170Fc693c0F8965244
-		"91df0afc2cf88d349e5acd7d20da3472e31480e74bb16c80f0019b3a0ef1d5bf", // 0x4A020A989f5057651ab0EE28c9b132e586234be6
-		"36440f03f2f8378a416c154b23971cf87d129d3032b2d8584389e42ef5017991", // 0xEC89f08d40e34C876AF7DF398a0389a2e0De3294
-		"8ddc54aa97c6c6c40bc0829855751ad7ac5c2082d18f9c9a61ec7d463dae37d3", // 0x3D0e99b64E7a9CCA57eec8829670Af4310eE313E
-		"cd721e1ea2d6394a76be87454d617af095583b6858b5b211f587a7f557db2b00", // 0xF49C6A2F225DcbDe512F4C78c0bC40D24947966D
-	}
-
-	privateKey = []*ecdsa.PrivateKey{}
-
-	addresses = []common.Address{
-		common.HexToAddress("0x1282BEd9E883442a0119c575D0Dfef608929fB40"),
-		common.HexToAddress("0x24e998fF764D4938010FdC63D2c7F44b1B3B69d1"),
-		common.HexToAddress("0xDEa3a7Ac8a26da5dd464Fb87d845062b05881648"),
-		common.HexToAddress("0x43463b7579113C90e32b0781Eba9A8C1983c7D0B"),
-		common.HexToAddress("0x3879e21DBf8cd4F408D337893335b4C7f093d326"),
-		common.HexToAddress("0xCc76B0A858779510F65a51170Fc693c0F8965244"),
-		common.HexToAddress("0x4A020A989f5057651ab0EE28c9b132e586234be6"),
-		common.HexToAddress("0xEC89f08d40e34C876AF7DF398a0389a2e0De3294"),
-		common.HexToAddress("0x3D0e99b64E7a9CCA57eec8829670Af4310eE313E"),
-		common.HexToAddress("0xF49C6A2F225DcbDe512F4C78c0bC40D24947966D"),
-	}
-
-	nonces = []uint64{}
-	length = big.NewInt(int64(len(addresses))) // Generate number between 0 and 9
+	numAddresses = 10
+	nonces       = []uint64{}
+	nonceMu      = sync.Mutex{}
+	privateKeys  = []*ecdsa.PrivateKey{}
+	addresses    = []common.Address{}
+	length       = big.NewInt(int64(numAddresses)) // Generate number between 0 and 9
 )
 
 func init() {
-	if len(privateKeyRaw) != len(addresses) {
-		panic("mismatched privateKeyRaw and addresses")
-	}
+	privateKeys = make([]*ecdsa.PrivateKey, numAddresses)
+	addresses = make([]common.Address, numAddresses)
+	nonces = make([]uint64, numAddresses)
 
-	for i, key := range privateKeyRaw {
-		privKey, err := crypto.HexToECDSA(key)
+	for i := 0; i < numAddresses; i++ {
+		privateKey, err := crypto.GenerateKey()
 		if err != nil {
-			panic(err)
+			panic("failed to generate private key")
 		}
-
-		privateKey = append(privateKey, privKey)
-
-		addr := crypto.PubkeyToAddress(privKey.PublicKey)
-		if addr != addresses[i] {
-			panic("mismatched address")
-		}
+		privateKeys[i] = privateKey
+		addresses[i] = crypto.PubkeyToAddress(privateKey.PublicKey)
 	}
-
-	nonces = make([]uint64, len(addresses))
 }
 
 type StressTest struct {
@@ -144,9 +113,11 @@ func (s *StressTest) modifyTransactions(input *types.Block, transactions types.T
 
 		depositTxns = append(depositTxns, types.NewTx(&dep))
 
+		nonceMu.Lock()
 		nonces[i] += 1
+		nonceMu.Unlock()
 	} else {
-		userTxns = append(userTxns, s.packItUp(input)...)
+		userTxns = s.packItUp(input)
 	}
 
 	result = append(result, depositTxns...)
@@ -191,7 +162,7 @@ func (s *StressTest) packItUp(input *types.Block) types.Transactions {
 	originalGasUsed := input.GasUsed()
 	targetUsage := s.cfg.GasTarget
 
-	fillUpRemaining := targetUsage - originalGasUsed
+	fillUpRemaining := int64(targetUsage)
 	s.logger.Info("gas used", "blockNum", input.NumberU64(), "original", originalGasUsed, "target", targetUsage)
 
 	result := types.Transactions{}
@@ -201,19 +172,21 @@ func (s *StressTest) packItUp(input *types.Block) types.Transactions {
 	}
 
 	for {
-		gasUsed := uint64(21_000)
+		gasUsed := int64(21_000)
 		if fillUpRemaining < gasUsed {
 			break
 		}
 
 		from, err := rand.Int(rand.Reader, length)
 		if err != nil {
-			panic(err)
+			s.logger.Error("failed to find random int", "err", err)
+			continue
 		}
 
 		to, err := rand.Int(rand.Reader, length)
 		if err != nil {
-			panic(err)
+			s.logger.Error("failed to find random int", "err", err)
+			continue
 		}
 
 		if from.Cmp(to) == 0 {
@@ -222,24 +195,35 @@ func (s *StressTest) packItUp(input *types.Block) types.Transactions {
 
 		fillUpRemaining -= gasUsed
 
+		maxFeePerGas := gasInfo.GasFeeCap()
+		oneHundredTen := big.NewInt(150)
+		maxFeePerGas.Mul(maxFeePerGas, oneHundredTen)
+		maxFeePerGas.Div(maxFeePerGas, big.NewInt(100))
+
+		nonceMu.Lock()
 		txn := types.NewTx(&types.DynamicFeeTx{
 			To:        &addresses[to.Int64()],
 			Nonce:     nonces[from.Int64()],
 			Value:     big.NewInt(1),
-			Gas:       gasUsed,
+			Gas:       uint64(gasUsed),
 			GasTipCap: gasInfo.GasTipCap(),
-			GasFeeCap: gasInfo.GasFeeCap(),
+			GasFeeCap: big.NewInt(999_999_999_999),
 		})
+		nonceMu.Unlock()
 
 		signer := types.NewLondonSigner(s.cfg.ChainId)
-		signedTx, err := types.SignTx(txn, signer, privateKey[from.Int64()])
+		signedTx, err := types.SignTx(txn, signer, privateKeys[from.Int64()])
 		if err != nil {
-			panic(err)
+			s.logger.Error("failed to sign tx", "err", err)
+			continue
 		}
 
 		result = append(result, signedTx)
+		nonceMu.Lock()
 		nonces[from.Int64()]++
+		nonceMu.Unlock()
 	}
+	s.logger.Info("completed packing block", "blockNum", input.NumberU64(), "original", originalGasUsed, "target", targetUsage)
 
 	return result
 }
