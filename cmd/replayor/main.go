@@ -60,7 +60,7 @@ func Main() cliapp.LifecycleAction {
 		}
 		logger.Info("storage setup complete")
 
-		statsRecorder := stats.NewStoredStats(s, logger)
+		statsRecorder := stats.NewStoredStats(s, logger, cfg.BenchmarkStartBlock)
 		logger.Info("stats recorder setup complete")
 
 		return replayor.NewService(c, statsRecorder, cfg, logger, close), nil
