@@ -45,18 +45,23 @@ func Main() cliapp.LifecycleAction {
 		if err != nil {
 			return nil, err
 		}
+		logger.Info("config setup complete")
 
 		c, err := clients.SetupClients(cfg, logger, ctx)
 		if err != nil {
 			return nil, err
 		}
+		logger.Info("client setup complete")
 
 		// Benchmark stats
 		s, err := stats.NewStorage(logger, cfg)
 		if err != nil {
 			return nil, err
 		}
-		statsRecorder := stats.NewStoredStats(s, logger)
+		logger.Info("storage setup complete")
+
+		statsRecorder := stats.NewStoredStats(s, logger, cfg.BenchmarkStartBlock)
+		logger.Info("stats recorder setup complete")
 
 		return replayor.NewService(c, statsRecorder, cfg, logger, close), nil
 	}

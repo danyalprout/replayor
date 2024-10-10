@@ -13,3 +13,5 @@ WORKDIR /app
 FROM golang:1.21
 
 COPY --from=builder /app/bin/replayor /app/bin/replayor
+
+CMD ["/app/bin/replayor"]

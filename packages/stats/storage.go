@@ -30,25 +30,33 @@ func NewStorage(l log.Logger, cfg config.ReplayorConfig) (Storage, error) {
 type Stats interface {
 	RecordBlockStats(bcs BlockCreationStats)
 	Write(ctx context.Context)
+	GetLastBlockWritten() uint64
 }
 
 type NoOpStats struct{}
 
 func (n *NoOpStats) RecordBlockStats(bcs BlockCreationStats) {}
 func (n *NoOpStats) Write(ctx context.Context)               {}
+func (n *NoOpStats) GetLastBlockWritten() uint64             { return uint64(0) }
 
-func NewStoredStats(s Storage, l log.Logger) Stats {
+func NewStoredStats(s Storage, l log.Logger, startBlock uint64) Stats {
 	return &StoredStats{
-		s:     s,
-		stats: []BlockCreationStats{},
-		log:   l,
+		s:                s,
+		stats:            []BlockCreationStats{},
+		log:              l,
+		lastBlockWritten: startBlock,
 	}
 }
 
 type StoredStats struct {
-	s     Storage
-	stats []BlockCreationStats
-	log   log.Logger
+	s                Storage
+	stats            []BlockCreationStats
+	log              log.Logger
+	lastBlockWritten uint64
+}
+
+func (s *StoredStats) GetLastBlockWritten() uint64 {
+	return s.lastBlockWritten
 }
 
 func (s *StoredStats) RecordBlockStats(bcs BlockCreationStats) {
@@ -56,6 +64,7 @@ func (s *StoredStats) RecordBlockStats(bcs BlockCreationStats) {
 }
 
 func (s *StoredStats) Write(ctx context.Context) {
+	s.log.Info("writing block stats")
 	_, err := retry.Do(ctx, 3, retry.Fixed(time.Second), func() (interface{}, error) {
 		err := s.s.Write(ctx, s.stats)
 		if err != nil {
@@ -63,10 +72,13 @@ func (s *StoredStats) Write(ctx context.Context) {
 		}
 		return nil, err
 	})
-
 	if err != nil {
 		s.log.Error("error writing to storage", "err", err)
 	}
+	if len(s.stats) > 0 {
+		s.lastBlockWritten = s.stats[len(s.stats)-1].BlockNumber
+	}
+	s.log.Info("successfully wrote block stats to storage", "lastBlockWritten", s.lastBlockWritten)
 }
 
 type BlockCreationStats struct {

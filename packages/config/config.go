@@ -2,6 +2,7 @@ package config
 
 import (
 	"fmt"
+	"math/big"
 	"os"
 	"strings"
 
@@ -15,14 +16,14 @@ import (
 type ReplayorConfig struct {
 	EngineApiSecret     common.Hash
 	SourceNodeUrl       string
-	ChainId             string
+	ChainId             *big.Int
 	RollupConfig        *rollup.Config
 	EngineApiUrl        string
 	ExecutionUrl        string
 	Strategy            string
 	BlockCount          int
-	GasTarget           int
-	GasLimit            int
+	GasTarget           uint64
+	GasLimit            uint64
 	BenchmarkStartBlock uint64
 	BenchmarkOpcodes    bool
 	ComputeStorageDiffs bool
@@ -44,13 +45,12 @@ func valueOrNil(i *uint64) string {
 }
 
 func LoadReplayorConfig(cliCtx *cli.Context, l log.Logger) (ReplayorConfig, error) {
-	jwtFile := cliCtx.String(EngineApiSecret.Name)
-	jwtBytes, err := os.ReadFile(jwtFile)
-	if err != nil {
-		return ReplayorConfig{}, err
+	secret := cliCtx.String(EngineApiSecret.Name)
+	if secret == "" {
+		return ReplayorConfig{}, fmt.Errorf("must provide REPLAYOR_ENGINE_API_SECRET env var")
 	}
 
-	secret := common.HexToHash(strings.TrimSpace(string(jwtBytes)))
+	secretHash := common.HexToHash(strings.TrimSpace(secret))
 
 	chainId := cliCtx.String(ChainId.Name)
 	rollupCfgPath := cliCtx.String(RollupConfigPath.Name)
@@ -66,26 +66,35 @@ func LoadReplayorConfig(cliCtx *cli.Context, l log.Logger) (ReplayorConfig, erro
 
 	l.Info("activation", "canyon", valueOrNil(rollupCfg.CanyonTime), "delta", valueOrNil(rollupCfg.DeltaTime), "ecotone", valueOrNil(rollupCfg.EcotoneTime), "fjord", valueOrNil(rollupCfg.FjordTime))
 
-	hostname, err := os.Hostname()
-	if err != nil {
-		return ReplayorConfig{}, err
+	testName := cliCtx.String(TestName.Name)
+	if testName == "" {
+		testName, err = os.Hostname()
+		if err != nil {
+			return ReplayorConfig{}, err
+		}
+	}
+
+	gasLimit := cliCtx.Uint64(GasLimit.Name)
+	gasTarget := cliCtx.Uint64(GasTarget.Name)
+	if gasTarget > gasLimit {
+		return ReplayorConfig{}, fmt.Errorf("cannot set gasTarget greater than gasLimit")
 	}
 
 	return ReplayorConfig{
-		EngineApiSecret:     secret,
+		EngineApiSecret:     secretHash,
 		SourceNodeUrl:       cliCtx.String(SourceNodeUrl.Name),
-		ChainId:             chainId,
+		ChainId:             rollupCfg.L2ChainID,
 		RollupConfig:        rollupCfg,
 		EngineApiUrl:        cliCtx.String(EngineApiUrl.Name),
 		ExecutionUrl:        cliCtx.String(ExecutionUrl.Name),
 		Strategy:            cliCtx.String(Strategy.Name),
 		BlockCount:          cliCtx.Int(BlockCount.Name),
-		GasTarget:           cliCtx.Int(GasTarget.Name),
-		GasLimit:            cliCtx.Int(GasLimit.Name),
+		GasTarget:           gasTarget,
+		GasLimit:            gasLimit,
 		BenchmarkStartBlock: cliCtx.Uint64(BenchmarkStartBlock.Name),
 		BenchmarkOpcodes:    cliCtx.Bool(BenchmarkOpcodes.Name),
 		ComputeStorageDiffs: cliCtx.Bool(ComputeStorageDiffs.Name),
-		TestName:            hostname,
+		TestName:            testName + "_",
 		Bucket:              cliCtx.String(S3Bucket.Name),
 		StorageType:         cliCtx.String(StorageType.Name),
 		DiskPath:            cliCtx.String(DiskPath.Name),

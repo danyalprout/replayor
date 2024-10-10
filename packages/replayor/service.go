@@ -38,6 +38,7 @@ func NewService(c clients.Clients, s stats.Stats, cfg config.ReplayorConfig, l l
 }
 
 func (r *Service) Start(ctx context.Context) error {
+	r.log.Info("starting replayor service")
 	cCtx, cancelFunc := context.WithCancel(ctx)
 	r.benchmarkCancel = cancelFunc
 
@@ -45,6 +46,7 @@ func (r *Service) Start(ctx context.Context) error {
 	if err != nil {
 		panic(err)
 	}
+	r.log.Info("retrieved current block number", "blockNum", currentBlock.Number())
 
 	retry.Do(ctx, 720, retry.Fixed(10*time.Second), func() (bool, error) {
 		result, err := r.clients.EngineApi.ForkchoiceUpdate(ctx, &eth.ForkchoiceState{
@@ -68,6 +70,7 @@ func (r *Service) Start(ctx context.Context) error {
 				r.clients,
 				r.cfg.RollupConfig,
 				r.log,
+				// strategies.NewStressTest(currentBlock, r.log, r.cfg, r.clients),
 				&strategies.OneForOne{},
 				&stats.NoOpStats{},
 				currentBlock,
@@ -94,7 +97,7 @@ func (r *Service) Start(ctx context.Context) error {
 	r.log.Info("Starting benchmark", "start_block", currentBlock.NumberU64())
 	strategy := strategies.LoadStrategy(r.cfg, r.log, r.clients, currentBlock)
 	if strategy == nil {
-		panic("failed to load strategy")
+		panic("could not load strategy")
 	}
 
 	benchmark := NewBenchmark(r.clients, r.cfg.RollupConfig, r.log, strategy, r.stats, currentBlock, uint64(r.cfg.BlockCount), r.cfg.BenchmarkOpcodes, r.cfg.ComputeStorageDiffs)
