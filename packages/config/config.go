@@ -66,9 +66,12 @@ func LoadReplayorConfig(cliCtx *cli.Context, l log.Logger) (ReplayorConfig, erro
 
 	l.Info("activation", "canyon", valueOrNil(rollupCfg.CanyonTime), "delta", valueOrNil(rollupCfg.DeltaTime), "ecotone", valueOrNil(rollupCfg.EcotoneTime), "fjord", valueOrNil(rollupCfg.FjordTime))
 
-	hostname, err := os.Hostname()
-	if err != nil {
-		return ReplayorConfig{}, err
+	testName := cliCtx.String(TestName.Name)
+	if testName == "" {
+		testName, err = os.Hostname()
+		if err != nil {
+			return ReplayorConfig{}, err
+		}
 	}
 
 	gasLimit := cliCtx.Uint64(GasLimit.Name)
@@ -91,7 +94,7 @@ func LoadReplayorConfig(cliCtx *cli.Context, l log.Logger) (ReplayorConfig, erro
 		BenchmarkStartBlock: cliCtx.Uint64(BenchmarkStartBlock.Name),
 		BenchmarkOpcodes:    cliCtx.Bool(BenchmarkOpcodes.Name),
 		ComputeStorageDiffs: cliCtx.Bool(ComputeStorageDiffs.Name),
-		TestName:            hostname,
+		TestName:            testName + "_",
 		Bucket:              cliCtx.String(S3Bucket.Name),
 		StorageType:         cliCtx.String(StorageType.Name),
 		DiskPath:            cliCtx.String(DiskPath.Name),
