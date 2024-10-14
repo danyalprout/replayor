@@ -37,7 +37,6 @@ type Benchmark struct {
 	previousReplayedBlockHash common.Hash
 	strategy                  strategies.Strategy
 
-	sm                  sync.Mutex
 	remainingBlockCount uint64
 	rollupCfg           *rollup.Config
 	startBlockNum       uint64
@@ -50,6 +49,12 @@ type Benchmark struct {
 func (r *Benchmark) getBlockFromSourceNode(ctx context.Context, blockNum uint64) (*types.Block, error) {
 	return retry.Do(ctx, 10, retry.Exponential(), func() (*types.Block, error) {
 		return r.clients.SourceNode.BlockByNumber(ctx, big.NewInt(int64(blockNum)))
+	})
+}
+
+func (r *Benchmark) getLatestBlockFromDestNode(ctx context.Context) (*types.Block, error) {
+	return retry.Do(ctx, 10, retry.Exponential(), func() (*types.Block, error) {
+		return r.clients.DestNode.BlockByNumber(ctx, nil)
 	})
 }
 
@@ -70,6 +75,7 @@ func (r *Benchmark) loadBlocks(ctx context.Context) {
 
 				block, err := r.getBlockFromSourceNode(ctx, blockNum)
 				if err != nil {
+					r.log.Error("failed to getBlockFromSourceNode", "blockNum", blockNum, "err", err)
 					panic(err)
 				}
 
@@ -96,6 +102,7 @@ func (r *Benchmark) loadBlocks(ctx context.Context) {
 
 func (r *Benchmark) addBlock(ctx context.Context, currentBlock strategies.BlockCreationParams) {
 	l := r.log.New("source", "add-block", "block", currentBlock.Number)
+	l.Info("processing new block")
 
 	stats := stats.BlockCreationStats{}
 
@@ -130,6 +137,8 @@ func (r *Benchmark) addBlock(ctx context.Context, currentBlock strategies.BlockC
 		Withdrawals:           &currentBlock.Withdrawals,
 	}
 
+	var totalTime time.Duration
+
 	startTime := time.Now()
 
 	result, err := r.clients.EngineApi.ForkchoiceUpdate(ctx, state, attrs)
@@ -145,19 +154,19 @@ func (r *Benchmark) addBlock(ctx context.Context, currentBlock strategies.BlockC
 	}
 
 	stats.FCUTime = fcuEnd.Sub(startTime)
+	totalTime += stats.FCUTime
 
 	envelope, err := r.clients.EngineApi.GetPayload(ctx, eth.PayloadInfo{
 		ID:        *result.PayloadID,
 		Timestamp: uint64(currentBlock.Time),
 	})
-
 	if err != nil {
 		l.Crit("get payload failed", "err", err, "payloadId", *result.PayloadID)
 	}
 
 	getTime := time.Now()
-
 	stats.GetTime = getTime.Sub(fcuEnd)
+	totalTime += stats.GetTime
 
 	err = r.strategy.ValidateExecution(ctx, envelope, currentBlock)
 	if err != nil {
@@ -169,13 +178,15 @@ func (r *Benchmark) addBlock(ctx context.Context, currentBlock strategies.BlockC
 		l.Crit("validation failed", "err", err, "executionPayload", *envelope.ExecutionPayload, "parentBeaconBlockRoot", envelope.ParentBeaconBlockRoot, "txnHashes", txnHash)
 	}
 
+	newStart := time.Now()
 	status, err := r.clients.EngineApi.NewPayload(ctx, envelope.ExecutionPayload, envelope.ParentBeaconBlockRoot)
 	if err != nil {
 		l.Crit("new payload failed", "err", err)
 	}
 
 	newEnd := time.Now()
-	stats.NewTime = newEnd.Sub(getTime)
+	stats.NewTime = newEnd.Sub(newStart)
+	totalTime += stats.NewTime
 
 	if status.Status != eth.ExecutionValid {
 		l.Crit("new payload failed", "status", status.Status)
@@ -187,13 +198,16 @@ func (r *Benchmark) addBlock(ctx context.Context, currentBlock strategies.BlockC
 		FinalizedBlockHash: envelope.ExecutionPayload.BlockHash,
 	}
 
-	status2, err := r.clients.EngineApi.ForkchoiceUpdate(ctx, state, nil)
+	fcu2status, err := r.clients.EngineApi.ForkchoiceUpdate(ctx, state, nil)
 	if err != nil {
 		l.Crit("forkchoice update failed", "err", err)
 	}
+	fcu2Time := time.Now()
+	stats.FCUNoAttrsTime = fcu2Time.Sub(newEnd)
+	totalTime += stats.FCUNoAttrsTime
 
-	if status2.PayloadStatus.Status != eth.ExecutionValid {
-		l.Crit("forkchoice update failed", "status", status2.PayloadStatus.Status)
+	if fcu2status.PayloadStatus.Status != eth.ExecutionValid {
+		l.Crit("forkchoice update failed", "status", fcu2status.PayloadStatus.Status)
 	}
 
 	err = r.strategy.ValidateBlock(ctx, envelope, currentBlock)
@@ -201,16 +215,15 @@ func (r *Benchmark) addBlock(ctx context.Context, currentBlock strategies.BlockC
 		l.Crit("validation failed", "err", err)
 	}
 
-	fcu2Time := time.Now()
-
-	stats.FCUNoAttrsTime = fcu2Time.Sub(newEnd)
-	stats.TotalTime = fcu2Time.Sub(startTime)
+	stats.TotalTime = totalTime
 	stats.BlockNumber = uint64(envelope.ExecutionPayload.BlockNumber)
 	stats.BlockHash = envelope.ExecutionPayload.BlockHash
 
 	r.previousReplayedBlockHash = envelope.ExecutionPayload.BlockHash
 
 	r.enrich(ctx, &stats)
+	l.Info("block stats", "totalTime", stats.TotalTime, "gasUsed", stats.GasUsed, "txCount", stats.TxnCount)
+
 	r.s.RecordBlockStats(stats)
 }
 
@@ -218,16 +231,16 @@ func (r *Benchmark) enrich(ctx context.Context, s *stats.BlockCreationStats) {
 	receipts, err := retry.Do(ctx, 3, retry.Exponential(), func() ([]*types.Receipt, error) {
 		return r.clients.DestNode.BlockReceipts(ctx, rpc.BlockNumberOrHash{BlockHash: &s.BlockHash})
 	})
-
 	if err != nil {
 		r.log.Warn("unable to load receipts", "err", err)
+		return
 	}
 
 	success := 0
 	for _, receipt := range receipts {
+		s.GasUsed += receipt.GasUsed
 		if receipt.Status == types.ReceiptStatusSuccessful {
 			success += 1
-			s.GasUsed += receipt.GasUsed
 		}
 	}
 	s.Success = float64(success) / float64(len(receipts))
@@ -253,11 +266,11 @@ func (r *Benchmark) submitBlocks(ctx context.Context) {
 }
 
 func (r *Benchmark) mapBlocks(ctx context.Context) {
+	defer r.log.Info("stopping block mapping")
 	for {
 		select {
 		case b, ok := <-r.incomingBlocks:
 			if !ok {
-				r.log.Info("stopping block mapping")
 				close(r.processBlocks)
 				return
 			} else if b == nil {
@@ -275,10 +288,10 @@ func (r *Benchmark) mapBlocks(ctx context.Context) {
 			return
 		}
 	}
-
 }
 
 func (r *Benchmark) Run(ctx context.Context) {
+	r.log.Info("benchmark run initiated")
 	doneChan := make(chan any)
 	go r.loadBlocks(ctx)
 	go r.mapBlocks(ctx)
@@ -297,18 +310,23 @@ func (r *Benchmark) Run(ctx context.Context) {
 	for {
 		select {
 		case <-doneChan:
-			r.log.Info("writing block stats")
 			r.s.Write(ctx)
 			return
 		case <-ticker.C:
-			currentBlock, err := r.clients.DestNode.BlockByNumber(ctx, nil)
+			currentBlock, err := r.getLatestBlockFromDestNode(ctx)
 			if err != nil {
-				l.Error("unable to load current block", "err", err)
+				r.log.Error("unable to load current block from dest node", "err", err)
+				panic(err)
 			}
 
 			l.Info("replay progress", "blocks", currentBlock.NumberU64()-lastBlockNum, "incomingBlocks", len(r.incomingBlocks), "processBlocks", len(r.processBlocks), "currentBlock", currentBlock.NumberU64(), "remaining", r.remainingBlockCount)
-
 			lastBlockNum = currentBlock.NumberU64()
+
+			// Periodically write to disk to save progress in case test is interrupted
+			lastBlockWritten := r.s.GetLastBlockWritten()
+			if lastBlockNum-lastBlockWritten >= 100 {
+				r.s.Write(ctx)
+			}
 		case <-ctx.Done():
 			return
 		}
@@ -326,7 +344,8 @@ func NewBenchmark(
 	currentBlock *types.Block,
 	benchmarkBlockCount uint64,
 	benchmarkOpcodes bool,
-	diffStorage bool) *Benchmark {
+	diffStorage bool,
+) *Benchmark {
 	r := &Benchmark{
 		clients:                   c,
 		rollupCfg:                 rollupCfg,

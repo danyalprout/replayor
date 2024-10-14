@@ -11,7 +11,7 @@ const EnvVarPrefix = "REPLAYOR"
 var (
 	EngineApiSecret = &cli.StringFlag{
 		Name:     "engine-api-secret",
-		Usage:    "The path to the engine api secret",
+		Usage:    "Engine api secret",
 		Required: true,
 		EnvVars:  opservice.PrefixEnvVar(EnvVarPrefix, "ENGINE_API_SECRET"),
 	}
@@ -82,6 +82,12 @@ var (
 		Usage:   "whether to include storage diff metrics in the benchmark results",
 		EnvVars: opservice.PrefixEnvVar(EnvVarPrefix, "COMPUTE_STORAGE_DIFFS"),
 	}
+	TestName = &cli.StringFlag{
+		Name:     "test-name",
+		Usage:    "test name used as prefix for output file",
+		Required: false,
+		EnvVars:  opservice.PrefixEnvVar(EnvVarPrefix, "TEST_NAME"),
+	}
 	S3Bucket = &cli.StringFlag{
 		Name:     "s3-bucket",
 		Usage:    "The S3 bucket to store results in",
@@ -104,7 +110,7 @@ var (
 
 func init() {
 	Flags = append(Flags, oplog.CLIFlags(EnvVarPrefix)...)
-	Flags = append(Flags, EngineApiSecret, SourceNodeUrl, ChainId, EngineApiUrl, ExecutionUrl, Strategy, BlockCount, GasTarget, GasLimit, S3Bucket, StorageType, DiskPath, BenchmarkStartBlock, BenchmarkOpcodes, ComputeStorageDiffs, RollupConfigPath)
+	Flags = append(Flags, EngineApiSecret, SourceNodeUrl, ChainId, EngineApiUrl, ExecutionUrl, Strategy, BlockCount, GasTarget, GasLimit, S3Bucket, StorageType, DiskPath, BenchmarkStartBlock, BenchmarkOpcodes, ComputeStorageDiffs, TestName, RollupConfigPath)
 }
 
 // Flags contains the list of configuration options available to the binary.

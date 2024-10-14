@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"strconv"
 	"time"
 
 	"github.com/danyalprout/replayor/packages/config"
@@ -19,10 +20,10 @@ type DiskStorage struct {
 }
 
 func NewDiskStorage(l log.Logger, cfg config.ReplayorConfig) (*DiskStorage, error) {
-	dir := fmt.Sprintf("%s/%s/%s", cfg.DiskPath, cfg.TestName, cfg.TestDescription())
-	path := fmt.Sprintf("%s/%d", dir, time.Now().Unix())
+	dir := fmt.Sprintf("%s/%s", cfg.DiskPath, cfg.TestDescription())
+	path := fmt.Sprintf("%s/%s", dir, cfg.TestName+strconv.FormatInt(time.Now().Unix(), 10))
 
-	err := os.MkdirAll(dir, 0755)
+	err := os.MkdirAll(dir, 0o755)
 	if err != nil {
 		return nil, err
 	}
@@ -40,7 +41,7 @@ func (s *DiskStorage) Write(ctx context.Context, data []BlockCreationStats) erro
 		return errors.New("error encoding data")
 	}
 
-	err = os.WriteFile(s.path, b, 0644)
+	err = os.WriteFile(s.path, b, 0o644)
 	if err != nil {
 		s.log.Warn("error writing results", "name", s.path, "err", err)
 		return errors.New("error writing data")
