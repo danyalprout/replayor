@@ -142,6 +142,7 @@ func (s *StressTest) BlockReceived(ctx context.Context, input *types.Block) *Blo
 		MixDigest:    eth.Bytes32(input.MixDigest()),
 		BeaconRoot:   input.BeaconRoot(),
 		validateInfo: input,
+		Withdrawals:  input.Withdrawals(),
 	}
 }
 
