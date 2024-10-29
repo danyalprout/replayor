@@ -48,7 +48,7 @@ func (r *Service) Start(ctx context.Context) error {
 	}
 	r.log.Info("retrieved current block number", "blockNum", currentBlock.Number())
 
-	retry.Do(ctx, 720, retry.Fixed(10*time.Second), func() (bool, error) {
+	_, _ = retry.Do(ctx, 720, retry.Fixed(10*time.Second), func() (bool, error) {
 		result, err := r.clients.EngineApi.ForkchoiceUpdate(ctx, &eth.ForkchoiceState{
 			HeadBlockHash:      currentBlock.Hash(),
 			SafeBlockHash:      currentBlock.Hash(),
@@ -79,7 +79,7 @@ func (r *Service) Start(ctx context.Context) error {
 				false)
 
 			walkUpToBlock.Run(cCtx)
-		} else {
+		} else if currentBlock.NumberU64() > r.cfg.BenchmarkStartBlock {
 			panic("current block is greater than benchmark start block")
 		}
 	}

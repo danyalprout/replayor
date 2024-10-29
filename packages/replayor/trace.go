@@ -49,12 +49,14 @@ var storageTracerOptions = map[string]any{
 }
 
 func (r *Benchmark) computeTraceStats(ctx context.Context, s *stats.BlockCreationStats, receipts []*types.Receipt) {
+	r.log.Info("enriching block stats", "receipts", len(receipts), "gasUsed", s.GasUsed)
 	if r.benchmarkOpcodes {
 		s.OpCodes = make(map[string]stats.OpCodeStats)
 
 		for _, receipt := range receipts {
 			r.traceReceipt(ctx, receipt, s.OpCodes)
 		}
+		r.log.Info("traced block receipts", "receipts", len(receipts), "gasUsed", s.GasUsed)
 	}
 
 	if r.diffStorage {
