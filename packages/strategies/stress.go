@@ -48,10 +48,8 @@ func init() {
 		addresses[i] = crypto.PubkeyToAddress(privateKey.PublicKey)
 	}
 
-	amount := new(big.Int)
 	// 0.1 ether
-	amount.SetString("100000000000000000", 10)
-	transferAmount = common.LeftPadBytes(amount.Bytes(), 32)
+	transferAmount = common.LeftPadBytes(big.NewInt(100000000000000000).Bytes(), 32)
 }
 
 type StressTest struct {
@@ -60,7 +58,6 @@ type StressTest struct {
 	logger     log.Logger
 	cfg        config.ReplayorConfig
 	clients    clients.Clients
-	notifyCh   chan struct{}
 }
 
 func NewStressTest(startBlock *types.Block, logger log.Logger, cfg config.ReplayorConfig, c clients.Clients) Strategy {
@@ -70,7 +67,6 @@ func NewStressTest(startBlock *types.Block, logger log.Logger, cfg config.Replay
 		logger:     logger,
 		cfg:        cfg,
 		clients:    c,
-		notifyCh:   make(chan struct{}, 2),
 	}
 }
 
@@ -282,7 +278,7 @@ func (s *StressTest) packErc20Transfer(input *types.Block) types.Transactions {
 		maxFeePerGas.Div(maxFeePerGas, big.NewInt(100))
 
 		nonceMu.Lock()
-		erc20ReceiveAddr := crypto.Keccak256(big.NewInt(int64(nonces[0])).Bytes()[:])[12:]
+		erc20ReceiveAddr := crypto.Keccak256(big.NewInt(int64(nonces[0])).Bytes())[:20]
 
 		var data []byte
 		data = append(data, transferSignature...)
