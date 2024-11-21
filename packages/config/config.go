@@ -37,13 +37,12 @@ type ReplayorConfig struct {
 	Bucket              string
 	StorageType         string
 	DiskPath            string
-	InjectERC20         bool
 }
 
 type StressConfig struct {
 	Type          string
 	OpCodeType    string
-	OpCodeExecNum int
+	OpCodeExecNum uint64
 }
 
 func (r ReplayorConfig) TestDescription() string {
@@ -95,10 +94,8 @@ func LoadReplayorConfig(cliCtx *cli.Context, l log.Logger) (ReplayorConfig, erro
 	strategy := cliCtx.String(Strategy.Name)
 	var stressConfig *StressConfig
 	if strategy == StrategyTypeStress {
-		stressConfig = &StressConfig{
-			Type:          cliCtx.String(StressType.Name),
-			OpCodeType:    cliCtx.String(StressOpcode.Name),
-			OpCodeExecNum: cliCtx.Int(StressOpcodeExecNum.Name),
+		if stressConfig, err = LoadStressConfig(cliCtx); err != nil {
+			return ReplayorConfig{}, err
 		}
 	}
 
@@ -121,6 +118,21 @@ func LoadReplayorConfig(cliCtx *cli.Context, l log.Logger) (ReplayorConfig, erro
 		Bucket:              cliCtx.String(S3Bucket.Name),
 		StorageType:         cliCtx.String(StorageType.Name),
 		DiskPath:            cliCtx.String(DiskPath.Name),
-		InjectERC20:         cliCtx.Bool(InjectErc20.Name),
 	}, nil
+}
+
+func LoadStressConfig(cliCtx *cli.Context) (*StressConfig, error) {
+	stressConfig := &StressConfig{
+		Type:          cliCtx.String(StressType.Name),
+		OpCodeType:    cliCtx.String(StressOpcode.Name),
+		OpCodeExecNum: cliCtx.Uint64(StressOpcodeExecNum.Name),
+	}
+	if stressConfig.Type == "opcode" {
+		if stressConfig.OpCodeExecNum < 50 {
+			return nil, fmt.Errorf("op code execution number too low")
+		} else if stressConfig.OpCodeExecNum > 5000 {
+			return nil, fmt.Errorf("op code execution number too high")
+		}
+	}
+	return stressConfig, nil
 }

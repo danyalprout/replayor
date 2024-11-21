@@ -31,6 +31,7 @@ var (
 	privateKeys  = []*ecdsa.PrivateKey{}
 	addresses    = []common.Address{}
 	length       = big.NewInt(int64(numAddresses)) // Generate number between 0 and 9
+	ZeroInt      = big.NewInt(0)
 )
 
 func init() {
@@ -54,11 +55,11 @@ type StressTest struct {
 	logger      log.Logger
 	cfg         config.ReplayorConfig
 	clients     clients.Clients
-	handler     StressHandler
+	packer      StressPacker
 	prepareOnce sync.Once
 }
 
-type StressHandler interface {
+type StressPacker interface {
 	PrepareDeployTx(input *types.Block) (*types.Transaction, error)
 	PackUp(input *types.Block) types.Transactions
 }
@@ -70,19 +71,20 @@ func NewStressTest(startBlock *types.Block, logger log.Logger, cfg config.Replay
 		logger:     logger,
 		cfg:        cfg,
 		clients:    c,
-		handler:    createStressHandler(&cfg, logger),
+		packer:     createStressHandler(&cfg, logger),
 	}
 }
 
-func createStressHandler(cfg *config.ReplayorConfig, logger log.Logger) StressHandler {
+func createStressHandler(cfg *config.ReplayorConfig, logger log.Logger) StressPacker {
 	switch cfg.StressConfig.Type {
 	case STRESS_TRANSFER:
-		return NewTransferStressHandler(cfg, logger)
+		return NewTransferStressPacker(cfg, logger)
 	case STRESS_ERC20:
-		return NewErc20StressHandler(cfg, logger)
+		return NewErc20StressPacker(cfg, logger)
+	case STRESS_OPCODE:
+		return NewOpcodeStressPacker(cfg, logger)
 	default:
 		panic(fmt.Errorf("unknown stress test type: %s=%s", "type", cfg.StressConfig.Type))
-		return nil
 	}
 }
 
@@ -102,12 +104,12 @@ func (s *StressTest) modifyTransactions(input *types.Block, transactions types.T
 		depositTxns = append(depositTxns, s.prepareDeposit(l1Info, currentBlockNum))
 
 		s.prepareOnce.Do(func() {
-			if prepareTx, err := s.handler.PrepareDeployTx(input); err == nil && prepareTx != nil {
+			if prepareTx, err := s.packer.PrepareDeployTx(input); err == nil && prepareTx != nil {
 				userTxns = append(types.Transactions{prepareTx}, userTxns...)
 			}
 		})
 	} else {
-		userTxns = s.handler.PackUp(input)
+		userTxns = s.packer.PackUp(input)
 	}
 
 	result := append(depositTxns, userTxns...)
