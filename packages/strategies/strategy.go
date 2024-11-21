@@ -11,11 +11,6 @@ import (
 	"github.com/ethereum/go-ethereum/log"
 )
 
-const (
-	strategyTypeStress = "stress"
-	strategyTypeReplay = "replay"
-)
-
 type BlockCreationParams struct {
 	Number       uint64
 	Transactions types.Transactions
@@ -36,9 +31,9 @@ type Strategy interface {
 
 func LoadStrategy(cfg config.ReplayorConfig, logger log.Logger, c clients.Clients, startBlock *types.Block) Strategy {
 	switch cfg.Strategy {
-	case strategyTypeStress:
+	case config.StrategyTypeStress:
 		return NewStressTest(startBlock, logger, cfg, c)
-	case strategyTypeReplay:
+	case config.StrategyTypeReplay:
 		return &OneForOne{}
 	default:
 		return nil

@@ -13,6 +13,11 @@ import (
 	"github.com/urfave/cli/v2"
 )
 
+const (
+	StrategyTypeStress = "stress"
+	StrategyTypeReplay = "replay"
+)
+
 type ReplayorConfig struct {
 	EngineApiSecret     common.Hash
 	SourceNodeUrl       string
@@ -21,6 +26,7 @@ type ReplayorConfig struct {
 	EngineApiUrl        string
 	ExecutionUrl        string
 	Strategy            string
+	StressConfig        *StressConfig
 	BlockCount          int
 	GasTarget           uint64
 	GasLimit            uint64
@@ -32,6 +38,12 @@ type ReplayorConfig struct {
 	StorageType         string
 	DiskPath            string
 	InjectERC20         bool
+}
+
+type StressConfig struct {
+	Type          string
+	OpCodeType    string
+	OpCodeExecNum int
 }
 
 func (r ReplayorConfig) TestDescription() string {
@@ -80,6 +92,15 @@ func LoadReplayorConfig(cliCtx *cli.Context, l log.Logger) (ReplayorConfig, erro
 	if gasTarget > gasLimit {
 		return ReplayorConfig{}, fmt.Errorf("cannot set gasTarget greater than gasLimit")
 	}
+	strategy := cliCtx.String(Strategy.Name)
+	var stressConfig *StressConfig
+	if strategy == StrategyTypeStress {
+		stressConfig = &StressConfig{
+			Type:          cliCtx.String(StressType.Name),
+			OpCodeType:    cliCtx.String(StressOpcode.Name),
+			OpCodeExecNum: cliCtx.Int(StressOpcodeExecNum.Name),
+		}
+	}
 
 	return ReplayorConfig{
 		EngineApiSecret:     secretHash,
@@ -89,6 +110,7 @@ func LoadReplayorConfig(cliCtx *cli.Context, l log.Logger) (ReplayorConfig, erro
 		EngineApiUrl:        cliCtx.String(EngineApiUrl.Name),
 		ExecutionUrl:        cliCtx.String(ExecutionUrl.Name),
 		Strategy:            cliCtx.String(Strategy.Name),
+		StressConfig:        stressConfig,
 		BlockCount:          cliCtx.Int(BlockCount.Name),
 		GasTarget:           gasTarget,
 		GasLimit:            gasLimit,

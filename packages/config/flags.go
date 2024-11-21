@@ -51,6 +51,27 @@ var (
 		Required: true,
 		EnvVars:  opservice.PrefixEnvVar(EnvVarPrefix, "STRATEGY"),
 	}
+	StressType = &cli.StringFlag{
+		Name:        "stress-type",
+		Usage:       "The type of stress strategy to use for replaying transactions",
+		Required:    false,
+		EnvVars:     opservice.PrefixEnvVar(EnvVarPrefix, "STRATEGY"),
+		DefaultText: "transfer",
+	}
+	StressOpcode = &cli.StringFlag{
+		Name:        "stress-opcode",
+		Usage:       "The opcode that stress strategy to use for replaying transactions",
+		Required:    false,
+		EnvVars:     opservice.PrefixEnvVar(EnvVarPrefix, "STRATEGY"),
+		DefaultText: "SSTORE",
+	}
+	StressOpcodeExecNum = &cli.IntFlag{
+		Name:        "stress-opcode-exec-num",
+		Usage:       "The execution number of opCode to call for replaying transactions",
+		Required:    false,
+		EnvVars:     opservice.PrefixEnvVar(EnvVarPrefix, "STRATEGY"),
+		DefaultText: "500",
+	}
 	BlockCount = &cli.IntFlag{
 		Name:     "block-count",
 		Usage:    "How many blocks to replay",
