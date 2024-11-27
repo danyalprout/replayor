@@ -453,7 +453,8 @@
               "options": {
                 "mode": "exclude",
                 "names": [
-                  "addCounts"
+                  "Counts",
+                  "Gas"
                 ],
                 "prefix": "All except:",
                 "readOnly": true
@@ -514,12 +515,12 @@
             },
             {
               "selector": "OpCodes.ADD.Count",
-              "text": "addCounts",
+              "text": "Counts",
               "type": "number"
             },
             {
               "selector": "OpCodes.ADD.Gas",
-              "text": "addGas",
+              "text": "Gas",
               "type": "number"
             }
           ],
@@ -542,6 +543,152 @@
         }
       ],
       "title": "OpCodes-ADD",
+      "type": "barchart"
+    },
+    {
+      "datasource": {
+        "type": "yesoreyeram-infinity-datasource",
+        "uid": "replayor"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "fillOpacity": 80,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "lineWidth": 1,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          }
+        },
+        "overrides": [
+          {
+            "__systemRef": "hideSeriesFrom",
+            "matcher": {
+              "id": "byNames",
+              "options": {
+                "mode": "exclude",
+                "names": [
+                  "Counts",
+                  "Gas"
+                ],
+                "prefix": "All except:",
+                "readOnly": true
+              }
+            },
+            "properties": [
+              {
+                "id": "custom.hideFrom",
+                "value": {
+                  "legend": false,
+                  "tooltip": false,
+                  "viz": true
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 8
+      },
+      "id": 8,
+      "options": {
+        "barRadius": 0,
+        "barWidth": 0.97,
+        "fullHighlight": false,
+        "groupWidth": 0.7,
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "limit": 15,
+        "orientation": "auto",
+        "showValue": "auto",
+        "sortBy": "value",
+        "stacking": "none",
+        "tooltip": {
+          "mode": "single",
+          "sort": "none"
+        },
+        "xField": "BlockNumber",
+        "xTickLabelRotation": 0,
+        "xTickLabelSpacing": 0
+      },
+      "pluginVersion": "11.3.0",
+      "targets": [
+        {
+          "columns": [
+            {
+              "selector": "BlockNumber",
+              "text": "",
+              "type": "number"
+            },
+            {
+              "selector": "OpCodes.ADDRESS.Count",
+              "text": "Counts",
+              "type": "number"
+            },
+            {
+              "selector": "OpCodes.ADDRESS.Gas",
+              "text": "Gas",
+              "type": "number"
+            }
+          ],
+          "filters": [],
+          "format": "table",
+          "global_query_id": "",
+          "json_options": {
+            "columnar": false,
+            "root_is_not_array": false
+          },
+          "refId": "A",
+          "root_selector": "",
+          "source": "url",
+          "type": "json",
+          "url": "http://nginx/replay-250/51d3ea41ec62_1729159159",
+          "url_options": {
+            "data": "",
+            "method": "GET"
+          }
+        }
+      ],
+      "title": "OpCodes-ADDRESS",
       "type": "barchart"
     }
   ],
