@@ -106,11 +106,17 @@ var (
 		Required: false,
 		EnvVars:  opservice.PrefixEnvVar(EnvVarPrefix, "DISK_PATH"),
 	}
+	InjectErc20 = &cli.BoolFlag{
+		Name:     "inject-erc20-txs",
+		Usage:    "whether to inject erc20 txs",
+		Required: false,
+		EnvVars:  opservice.PrefixEnvVar(EnvVarPrefix, "INJECT_ERC20_TXS"),
+	}
 )
 
 func init() {
 	Flags = append(Flags, oplog.CLIFlags(EnvVarPrefix)...)
-	Flags = append(Flags, EngineApiSecret, SourceNodeUrl, ChainId, EngineApiUrl, ExecutionUrl, Strategy, BlockCount, GasTarget, GasLimit, S3Bucket, StorageType, DiskPath, BenchmarkStartBlock, BenchmarkOpcodes, ComputeStorageDiffs, TestName, RollupConfigPath)
+	Flags = append(Flags, EngineApiSecret, SourceNodeUrl, ChainId, EngineApiUrl, ExecutionUrl, Strategy, BlockCount, GasTarget, GasLimit, S3Bucket, StorageType, DiskPath, BenchmarkStartBlock, BenchmarkOpcodes, ComputeStorageDiffs, TestName, RollupConfigPath, InjectErc20)
 }
 
 // Flags contains the list of configuration options available to the binary.

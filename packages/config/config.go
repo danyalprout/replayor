@@ -31,6 +31,7 @@ type ReplayorConfig struct {
 	Bucket              string
 	StorageType         string
 	DiskPath            string
+	InjectERC20         bool
 }
 
 func (r ReplayorConfig) TestDescription() string {
@@ -98,5 +99,6 @@ func LoadReplayorConfig(cliCtx *cli.Context, l log.Logger) (ReplayorConfig, erro
 		Bucket:              cliCtx.String(S3Bucket.Name),
 		StorageType:         cliCtx.String(StorageType.Name),
 		DiskPath:            cliCtx.String(DiskPath.Name),
+		InjectERC20:         cliCtx.Bool(InjectErc20.Name),
 	}, nil
 }
