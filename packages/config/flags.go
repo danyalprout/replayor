@@ -47,9 +47,30 @@ var (
 	}
 	Strategy = &cli.StringFlag{
 		Name:     "strategy",
-		Usage:    "The strategy to use for replaying transactions",
+		Usage:    "The strategy to use for replaying transactions, support: replay, stress",
 		Required: true,
 		EnvVars:  opservice.PrefixEnvVar(EnvVarPrefix, "STRATEGY"),
+	}
+	StressType = &cli.StringFlag{
+		Name:        "stress-type",
+		Usage:       "The type of stress strategy to use for replaying transactions, support: transfer, erc20, opcode",
+		Required:    false,
+		EnvVars:     opservice.PrefixEnvVar(EnvVarPrefix, "STRESS_TYPE"),
+		DefaultText: "transfer",
+	}
+	StressOpcode = &cli.StringFlag{
+		Name:        "stress-opcode",
+		Usage:       "The opcode that stress strategy to use for replaying transactions",
+		Required:    false,
+		EnvVars:     opservice.PrefixEnvVar(EnvVarPrefix, "STRESS_OPCODE"),
+		DefaultText: "SSTORE",
+	}
+	StressOpcodeExecNum = &cli.IntFlag{
+		Name:        "stress-opcode-exec-num",
+		Usage:       "The execution number of opCode to call for replaying transactions,minimum 50, maximum 5000",
+		Required:    false,
+		EnvVars:     opservice.PrefixEnvVar(EnvVarPrefix, "STRESS_OPCODE_EXEC_NUM"),
+		DefaultText: "500",
 	}
 	BlockCount = &cli.IntFlag{
 		Name:     "block-count",
@@ -106,17 +127,33 @@ var (
 		Required: false,
 		EnvVars:  opservice.PrefixEnvVar(EnvVarPrefix, "DISK_PATH"),
 	}
-	InjectErc20 = &cli.BoolFlag{
-		Name:     "inject-erc20-txs",
-		Usage:    "whether to inject erc20 txs",
-		Required: false,
-		EnvVars:  opservice.PrefixEnvVar(EnvVarPrefix, "INJECT_ERC20_TXS"),
-	}
 )
 
 func init() {
 	Flags = append(Flags, oplog.CLIFlags(EnvVarPrefix)...)
-	Flags = append(Flags, EngineApiSecret, SourceNodeUrl, ChainId, EngineApiUrl, ExecutionUrl, Strategy, BlockCount, GasTarget, GasLimit, S3Bucket, StorageType, DiskPath, BenchmarkStartBlock, BenchmarkOpcodes, ComputeStorageDiffs, TestName, RollupConfigPath, InjectErc20)
+	replayorFlags := []cli.Flag{
+		EngineApiSecret,
+		SourceNodeUrl,
+		ChainId,
+		RollupConfigPath,
+		EngineApiUrl,
+		ExecutionUrl,
+		Strategy,
+		StressType,
+		StressOpcode,
+		StressOpcodeExecNum,
+		BlockCount,
+		GasTarget,
+		GasLimit,
+		BenchmarkStartBlock,
+		BenchmarkOpcodes,
+		ComputeStorageDiffs,
+		TestName,
+		S3Bucket,
+		StorageType,
+		DiskPath,
+	}
+	Flags = append(Flags, replayorFlags...)
 }
 
 // Flags contains the list of configuration options available to the binary.
