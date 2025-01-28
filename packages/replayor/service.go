@@ -70,7 +70,6 @@ func (r *Service) Start(ctx context.Context) error {
 				r.clients,
 				r.cfg.RollupConfig,
 				r.log,
-				// strategies.NewStressTest(currentBlock, r.log, r.cfg, r.clients),
 				&strategies.OneForOne{},
 				&stats.NoOpStats{},
 				currentBlock,

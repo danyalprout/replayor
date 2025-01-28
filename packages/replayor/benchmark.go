@@ -140,9 +140,7 @@ func (r *Benchmark) addBlock(ctx context.Context, currentBlock strategies.BlockC
 	var totalTime time.Duration
 
 	startTime := time.Now()
-
 	result, err := r.clients.EngineApi.ForkchoiceUpdate(ctx, state, attrs)
-
 	fcuEnd := time.Now()
 
 	if err != nil {

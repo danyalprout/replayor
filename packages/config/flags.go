@@ -112,11 +112,38 @@ var (
 		Required: false,
 		EnvVars:  opservice.PrefixEnvVar(EnvVarPrefix, "INJECT_ERC20_TXS"),
 	}
+	PrecompileTarget = &cli.StringFlag{
+		Name:     "precompile-target",
+		Usage:    "precompile opcode indicating which nject PrecompileTargeter txs",
+		Required: false,
+		Value:    "",
+		EnvVars:  opservice.PrefixEnvVar(EnvVarPrefix, "PRECOMPILE_TARGET"),
+	}
 )
 
 func init() {
 	Flags = append(Flags, oplog.CLIFlags(EnvVarPrefix)...)
-	Flags = append(Flags, EngineApiSecret, SourceNodeUrl, ChainId, EngineApiUrl, ExecutionUrl, Strategy, BlockCount, GasTarget, GasLimit, S3Bucket, StorageType, DiskPath, BenchmarkStartBlock, BenchmarkOpcodes, ComputeStorageDiffs, TestName, RollupConfigPath, InjectErc20)
+	Flags = append(Flags,
+		EngineApiSecret,
+		SourceNodeUrl,
+		ChainId,
+		EngineApiUrl,
+		ExecutionUrl,
+		Strategy,
+		BlockCount,
+		GasTarget,
+		GasLimit,
+		S3Bucket,
+		StorageType,
+		DiskPath,
+		BenchmarkStartBlock,
+		BenchmarkOpcodes,
+		ComputeStorageDiffs,
+		TestName,
+		RollupConfigPath,
+		InjectErc20,
+		PrecompileTarget,
+	)
 }
 
 // Flags contains the list of configuration options available to the binary.
