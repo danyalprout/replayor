@@ -6,6 +6,7 @@ import (
 	"os"
 	"strings"
 
+	"github.com/danyalprout/replayor/packages/precompiles"
 	opnode "github.com/ethereum-optimism/optimism/op-node"
 	"github.com/ethereum-optimism/optimism/op-node/rollup"
 	"github.com/ethereum/go-ethereum/common"
@@ -32,6 +33,7 @@ type ReplayorConfig struct {
 	StorageType         string
 	DiskPath            string
 	InjectERC20         bool
+	PrecompileTarget    string
 }
 
 func (r ReplayorConfig) TestDescription() string {
@@ -81,6 +83,22 @@ func LoadReplayorConfig(cliCtx *cli.Context, l log.Logger) (ReplayorConfig, erro
 		return ReplayorConfig{}, fmt.Errorf("cannot set gasTarget greater than gasLimit")
 	}
 
+	injectErc20 := cliCtx.Bool(InjectErc20.Name)
+	precompileTarget := cliCtx.String(PrecompileTarget.Name)
+	if injectErc20 && precompileTarget != "" {
+		return ReplayorConfig{}, fmt.Errorf("cannot inject ERC20 and set precompile target")
+	}
+
+	if precompileTarget != "" {
+		if _, ok := precompiles.PrecompileSignatures[precompileTarget]; !ok {
+			return ReplayorConfig{},
+				fmt.Errorf("invalid precompile target: %s. Valid targets: %s",
+					precompileTarget,
+					precompiles.GetValidPrecompileNames(),
+				)
+		}
+	}
+
 	return ReplayorConfig{
 		EngineApiSecret:     secretHash,
 		SourceNodeUrl:       cliCtx.String(SourceNodeUrl.Name),
@@ -100,5 +118,6 @@ func LoadReplayorConfig(cliCtx *cli.Context, l log.Logger) (ReplayorConfig, erro
 		StorageType:         cliCtx.String(StorageType.Name),
 		DiskPath:            cliCtx.String(DiskPath.Name),
 		InjectERC20:         cliCtx.Bool(InjectErc20.Name),
+		PrecompileTarget:    precompileTarget,
 	}, nil
 }
