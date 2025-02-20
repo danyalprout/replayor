@@ -268,6 +268,7 @@ func (s *StressTest) BlockReceived(ctx context.Context, input *types.Block) *Blo
 		BeaconRoot:   input.BeaconRoot(),
 		validateInfo: input,
 		Withdrawals:  input.Withdrawals(),
+		Extra:        input.Extra(),
 	}
 }
 

@@ -23,6 +23,7 @@ func blockToCreationParams(input *types.Block) BlockCreationParams {
 		BeaconRoot:   input.BeaconRoot(),
 		FeeRecipient: input.Coinbase(),
 		Withdrawals:  input.Withdrawals(),
+		Extra:        input.Extra(),
 		validateInfo: input.Hash(),
 	}
 }
