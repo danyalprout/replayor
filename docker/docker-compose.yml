@@ -1,0 +1,33 @@
+---
+x-logging: &logging
+  logging:
+    driver: json-file
+    options:
+      max-size: 10m
+      max-file: "3"
+
+services:
+
+  grafana:
+    image: grafana/grafana
+    container_name: grafana
+    ports:
+      - "3001:3000"
+    volumes:
+      - ../results/:/opt/grafana/data/:ro
+      - ./grafana/provisioning/:/etc/grafana/provisioning/:ro
+    environment:
+      - GF_SECURITY_ADMIN_USER=replayor
+      - GF_SECURITY_ADMIN_PASSWORD=replayor
+      - GF_INSTALL_PLUGINS=yesoreyeram-infinity-datasource,marcusolsson-json-datasource
+      - GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH=/etc/grafana/provisioning/dashboards/dashboard.json
+
+
+  nginx:
+    image: nginx:latest
+    container_name: nginx
+    ports:
+      - "8000:80"
+    volumes:
+      - ./nginx.conf:/etc/nginx/conf.d/default.conf
+      - ../results/:/opt/grafana/data/:ro
