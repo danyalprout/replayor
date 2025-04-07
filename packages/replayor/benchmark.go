@@ -14,6 +14,7 @@ import (
 	"github.com/ethereum-optimism/optimism/op-service/eth"
 	"github.com/ethereum-optimism/optimism/op-service/retry"
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/consensus/misc/eip1559"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/rpc"
@@ -137,6 +138,15 @@ func (r *Benchmark) addBlock(ctx context.Context, currentBlock strategies.BlockC
 		Withdrawals:           &currentBlock.Withdrawals,
 	}
 
+	if r.rollupCfg.IsHolocene(uint64(currentBlock.Time)) {
+		l.Info("holocene block", "holoceneTime", r.rollupCfg.HoloceneTime)
+		d, e := eip1559.DecodeHoloceneExtraData(currentBlock.Extra)
+		eip1559Params := eip1559.EncodeHolocene1559Params(d, e)
+		var params eth.Bytes8
+		copy(params[:], eip1559Params)
+		attrs.EIP1559Params = &params
+	}
+
 	var totalTime time.Duration
 
 	startTime := time.Now()
@@ -144,11 +154,11 @@ func (r *Benchmark) addBlock(ctx context.Context, currentBlock strategies.BlockC
 	fcuEnd := time.Now()
 
 	if err != nil {
-		l.Crit("forkchoice update failed", "err", err)
+		l.Crit("forkchoice update with attrs failed", "err", err)
 	}
 
 	if result.PayloadStatus.Status != eth.ExecutionValid {
-		l.Crit("forkchoice update failed", "status", result.PayloadStatus.Status)
+		l.Crit("forkchoice update with attrs failed", "status", result.PayloadStatus.Status)
 	}
 
 	stats.FCUTime = fcuEnd.Sub(startTime)
@@ -198,14 +208,14 @@ func (r *Benchmark) addBlock(ctx context.Context, currentBlock strategies.BlockC
 
 	fcu2status, err := r.clients.EngineApi.ForkchoiceUpdate(ctx, state, nil)
 	if err != nil {
-		l.Crit("forkchoice update failed", "err", err)
+		l.Crit("forkchoice update nil attrs failed", "err", err)
 	}
 	fcu2Time := time.Now()
 	stats.FCUNoAttrsTime = fcu2Time.Sub(newEnd)
 	totalTime += stats.FCUNoAttrsTime
 
 	if fcu2status.PayloadStatus.Status != eth.ExecutionValid {
-		l.Crit("forkchoice update failed", "status", fcu2status.PayloadStatus.Status)
+		l.Crit("forkchoice update nil attrs failed", "status", fcu2status.PayloadStatus.Status)
 	}
 
 	err = r.strategy.ValidateBlock(ctx, envelope, currentBlock)
