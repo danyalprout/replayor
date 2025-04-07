@@ -1,4 +1,4 @@
-FROM golang:1.21 AS builder
+FROM golang:1.22 AS builder
 
 WORKDIR /app
 
@@ -10,7 +10,7 @@ RUN go build -o bin/replayor ./cmd/replayor/main.go
 
 WORKDIR /app
 
-FROM golang:1.21
+FROM golang:1.22
 
 COPY --from=builder /app/bin/replayor /app/bin/replayor
 
