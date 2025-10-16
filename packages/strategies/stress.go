@@ -10,6 +10,7 @@ import (
 	"github.com/danyalprout/replayor/packages/clients"
 	"github.com/danyalprout/replayor/packages/config"
 	"github.com/danyalprout/replayor/packages/precompiles"
+	"github.com/danyalprout/replayor/packages/storage_stressor"
 	"github.com/ethereum-optimism/optimism/op-node/rollup/derive"
 	"github.com/ethereum-optimism/optimism/op-service/eth"
 	"github.com/ethereum/go-ethereum/common"
@@ -63,6 +64,64 @@ func NewStressTest(startBlock *types.Block, logger log.Logger, cfg config.Replay
 	}
 }
 
+// Helper function to deploy any contract
+func (s *StressTest) prepareDeployContract(input *types.Block, bytecode string) (*types.Transaction, error) {
+	s.logger.Info("Preparing tx to deploy " + s.cfg.StressTestType + " contract...")
+	gasUsed := uint64(2_000_000)
+
+	// Calculate gas fee with adjustment
+	maxFeePerGas := big.NewInt(999_999_999_999) // Using a fixed large value for simplicity
+
+	signedTx, err := s.createSignedTx(
+		0,                                   // From index 0
+		nil,                                 // No "to" for contract creation
+		big.NewInt(0),                       // No value
+		gasUsed,                             // Gas limit
+		input.Transactions()[1].GasTipCap(), // Use tip from existing transaction
+		maxFeePerGas,                        // Use high max fee
+		common.Hex2Bytes(bytecode),          // Contract bytecode
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	// Calculate contract address
+	nonceMu.Lock()
+	contractNonce := nonces[0] - 1 // The nonce that was used (already incremented)
+	testContractAddress = crypto.CreateAddress(addresses[0], contractNonce)
+	s.logger.Info(s.cfg.StressTestType+" contract address", "address", testContractAddress.String())
+	nonceMu.Unlock()
+
+	return signedTx, nil
+}
+
+// Helper function to create and sign transactions with unified nonce management
+func (s *StressTest) createSignedTx(fromIndex int, to *common.Address, value *big.Int, gas uint64, tipCap *big.Int, feeCap *big.Int, data []byte) (*types.Transaction, error) {
+	nonceMu.Lock()
+	nonce := nonces[fromIndex]
+	nonces[fromIndex]++
+	nonceMu.Unlock()
+
+	txn := types.NewTx(&types.DynamicFeeTx{
+		To:        to,
+		Nonce:     nonce,
+		Value:     value,
+		Gas:       gas,
+		GasTipCap: tipCap,
+		GasFeeCap: feeCap,
+		Data:      data,
+	})
+
+	signer := types.NewLondonSigner(s.cfg.ChainId)
+	signedTx, err := types.SignTx(txn, signer, privateKeys[fromIndex])
+	if err != nil {
+		s.logger.Error("failed to sign tx", "err", err)
+		return nil, err
+	}
+
+	return signedTx, nil
+}
+
 func (s *StressTest) modifyTransactions(input *types.Block, transactions types.Transactions) types.Transactions {
 	depositTxn := transactions[0]
 	l1Info, err := derive.L1BlockInfoFromBytes(s.cfg.RollupConfig, input.Time(), depositTxn.Data())
@@ -85,17 +144,23 @@ func (s *StressTest) modifyTransactions(input *types.Block, transactions types.T
 		depositTxns = append(depositTxns, dep)
 
 		if currentBlockNum == startBlockNum+1 {
-			if s.cfg.InjectERC20 {
-				contractDeployTx, err := s.prepareDeployErc20(input)
-				if err != nil {
-					panic(err)
-				}
-				userTxns = append(types.Transactions{contractDeployTx}, userTxns...)
-			} else if s.cfg.PrecompileTarget != "" {
-				contractDeployTx, err := s.prepareDeployPrecompileTargeter(input)
-				if err != nil {
-					panic(err)
-				}
+			var contractDeployTx *types.Transaction
+			var err error
+
+			switch s.cfg.StressTestType {
+			case "erc20":
+				contractDeployTx, err = s.prepareDeployContract(input, ERC20Bytecode)
+			case "precompile":
+				contractDeployTx, err = s.prepareDeployContract(input, precompiles.PrecompileTargeterBytecode)
+			case "storage":
+				contractDeployTx, err = s.prepareDeployContract(input, storage_stressor.StorageStressorBytecode)
+			}
+
+			if err != nil {
+				panic(err)
+			}
+
+			if contractDeployTx != nil {
 				userTxns = append(types.Transactions{contractDeployTx}, userTxns...)
 			}
 		}
@@ -165,84 +230,6 @@ func (s *StressTest) randAddrIndex() (from *big.Int, to *big.Int, err error) {
 	}
 }
 
-func (s *StressTest) prepareDeployPrecompileTargeter(input *types.Block) (*types.Transaction, error) {
-	s.logger.Info("Preparing tx to deploy PrecompileTargeter contract...")
-	gasUsed := int64(2_000_000)
-
-	maxFeePerGas := input.Transactions()[1].GasFeeCap()
-	oneHundredTen := big.NewInt(150)
-	maxFeePerGas.Mul(maxFeePerGas, oneHundredTen)
-	maxFeePerGas.Div(maxFeePerGas, big.NewInt(100))
-
-	nonceMu.Lock()
-	nonce := nonces[0]
-	txn := types.NewTx(&types.DynamicFeeTx{
-		Nonce:     nonce,
-		Value:     big.NewInt(0),
-		Gas:       uint64(gasUsed),
-		GasTipCap: input.Transactions()[1].GasTipCap(),
-		GasFeeCap: big.NewInt(999_999_999_999),
-		Data:      common.Hex2Bytes(precompiles.PrecompileTargeterBytecode),
-	})
-
-	testContractAddress = crypto.CreateAddress(addresses[0], nonce)
-	s.logger.Info("PrecompileTargeter contract address", "address", testContractAddress.String())
-	nonceMu.Unlock()
-
-	txn.Hash()
-	signer := types.NewLondonSigner(s.cfg.ChainId)
-	signedTx, err := types.SignTx(txn, signer, privateKeys[0])
-	if err != nil {
-		s.logger.Error("failed to sign tx", "err", err)
-		return nil, err
-	}
-
-	nonceMu.Lock()
-	nonces[0] += 1
-	nonceMu.Unlock()
-
-	return signedTx, nil
-}
-
-func (s *StressTest) prepareDeployErc20(input *types.Block) (*types.Transaction, error) {
-	s.logger.Info("Preparing tx to deploy ERC20 contract...")
-	gasUsed := int64(2_000_000)
-
-	maxFeePerGas := input.Transactions()[1].GasFeeCap()
-	oneHundredTen := big.NewInt(150)
-	maxFeePerGas.Mul(maxFeePerGas, oneHundredTen)
-	maxFeePerGas.Div(maxFeePerGas, big.NewInt(100))
-
-	nonceMu.Lock()
-	nonce := nonces[0]
-	txn := types.NewTx(&types.DynamicFeeTx{
-		Nonce:     nonce,
-		Value:     big.NewInt(0),
-		Gas:       uint64(gasUsed),
-		GasTipCap: input.Transactions()[1].GasTipCap(),
-		GasFeeCap: big.NewInt(999_999_999_999),
-		Data:      common.Hex2Bytes(ERC20Bytecode),
-	})
-
-	testContractAddress = crypto.CreateAddress(addresses[0], nonce)
-	s.logger.Info("ERC20 contract address", "address", testContractAddress.String())
-	nonceMu.Unlock()
-
-	txn.Hash()
-	signer := types.NewLondonSigner(s.cfg.ChainId)
-	signedTx, err := types.SignTx(txn, signer, privateKeys[0])
-	if err != nil {
-		s.logger.Error("failed to sign tx", "err", err)
-		return nil, err
-	}
-
-	nonceMu.Lock()
-	nonces[0] += 1
-	nonceMu.Unlock()
-
-	return signedTx, nil
-}
-
 func (s *StressTest) splitTxs(txs types.Transactions) (depositTxns types.Transactions, userTxns types.Transactions) {
 	for _, txn := range txs {
 		if txn.IsDepositTx() {
@@ -283,13 +270,71 @@ func (s *StressTest) ValidateBlock(ctx context.Context, e *eth.ExecutionPayloadE
 }
 
 func (s *StressTest) packItUp(input *types.Block) types.Transactions {
-	if s.cfg.InjectERC20 {
+	switch s.cfg.StressTestType {
+	case "erc20":
 		return s.packErc20Transfer(input)
-	} else if s.cfg.PrecompileTarget != "" {
+	case "precompile":
 		return s.packPrecompileTargeter(input)
-	} else {
+	case "storage":
+		return s.packStorageStressor(input)
+	default:
 		return s.packEthTransfer(input)
 	}
+}
+
+func (s *StressTest) packStorageStressor(input *types.Block) types.Transactions {
+	gasInfo := input.Transactions()[len(input.Transactions())-1]
+	targetUsage := s.cfg.GasTarget
+	s.logger.Info("gas used", "blockNum", input.NumberU64(), "target", targetUsage)
+
+	fcnSig, ok := storage_stressor.StorageStressorSignatures[s.cfg.StressTestFunction]
+	if !ok {
+		panic("invalid storage stressor function")
+	}
+
+	var data []byte
+	data = append(data, fcnSig...)
+
+	var numTxs int
+	if s.cfg.StressTestFunction == "writeStorage" {
+		data = append(data, common.LeftPadBytes(big.NewInt(100).Bytes(), 32)...)
+		numTxs = int(targetUsage / 4_849_870)
+	} else if s.cfg.StressTestFunction == "writeStorage2" {
+		data = append(data, common.LeftPadBytes(big.NewInt(42).Bytes(), 32)...)
+		numTxs = int(targetUsage / 4_963_747)
+	} else if s.cfg.StressTestFunction == "deployContracts" {
+		data = append(data, common.LeftPadBytes(big.NewInt(8).Bytes(), 32)...)
+		numTxs = int(targetUsage / 4_816_325)
+	}
+
+	result := types.Transactions{}
+
+	s.logger.Info("num txs", "blockNum", input.NumberU64(), "numTxs", numTxs, "function", s.cfg.StressTestFunction)
+	for i := 0; i < numTxs; i++ {
+		nonceMu.Lock()
+		txn := types.NewTx(&types.DynamicFeeTx{
+			To:        &testContractAddress,
+			Nonce:     nonces[0],
+			Value:     big.NewInt(0),
+			Gas:       targetUsage,
+			GasTipCap: gasInfo.GasTipCap(),
+			GasFeeCap: big.NewInt(999_999_999_999_999_999),
+			Data:      data,
+		})
+		nonces[0] += 1
+		nonceMu.Unlock()
+
+		signer := types.NewLondonSigner(s.cfg.ChainId)
+		signedTx, err := types.SignTx(txn, signer, privateKeys[0])
+		if err != nil {
+			s.logger.Error("failed to sign tx", "err", err)
+			continue
+		}
+		result = append(result, signedTx)
+	}
+
+	s.logger.Info("completed packing block", "blockNum", input.NumberU64(), "target", targetUsage)
+	return result
 }
 
 func (s *StressTest) packPrecompileTargeter(input *types.Block) types.Transactions {
@@ -298,7 +343,7 @@ func (s *StressTest) packPrecompileTargeter(input *types.Block) types.Transactio
 	targetUsage := s.cfg.GasTarget
 	s.logger.Info("gas used", "blockNum", input.NumberU64(), "target", targetUsage)
 
-	fcnSig, ok := precompiles.PrecompileSignatures[s.cfg.PrecompileTarget]
+	fcnSig, ok := precompiles.PrecompileSignatures[s.cfg.StressTestFunction]
 	if !ok {
 		panic("invalid precompile target")
 	}
@@ -310,7 +355,7 @@ func (s *StressTest) packPrecompileTargeter(input *types.Block) types.Transactio
 		Value:     big.NewInt(0),
 		Gas:       uint64(targetUsage),
 		GasTipCap: gasInfo.GasTipCap(),
-		GasFeeCap: big.NewInt(999_999_999_999_999),
+		GasFeeCap: big.NewInt(999_999_999_999_999_999),
 		Data:      fcnSig,
 	})
 	nonceMu.Unlock()

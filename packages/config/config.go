@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/danyalprout/replayor/packages/precompiles"
+	"github.com/danyalprout/replayor/packages/storage_stressor"
 	opnode "github.com/ethereum-optimism/optimism/op-node"
 	"github.com/ethereum-optimism/optimism/op-node/rollup"
 	"github.com/ethereum/go-ethereum/common"
@@ -32,8 +33,8 @@ type ReplayorConfig struct {
 	Bucket              string
 	StorageType         string
 	DiskPath            string
-	InjectERC20         bool
-	PrecompileTarget    string
+	StressTestType      string
+	StressTestFunction  string
 }
 
 func (r ReplayorConfig) TestDescription() string {
@@ -83,22 +84,47 @@ func LoadReplayorConfig(cliCtx *cli.Context, l log.Logger) (ReplayorConfig, erro
 		return ReplayorConfig{}, fmt.Errorf("cannot set gasTarget greater than gasLimit")
 	}
 
-	injectErc20 := cliCtx.Bool(InjectErc20.Name)
-	precompileTarget := cliCtx.String(PrecompileTarget.Name)
-	if injectErc20 && precompileTarget != "" {
-		return ReplayorConfig{}, fmt.Errorf("cannot inject ERC20 and set precompile target")
-	}
+	strategy := cliCtx.String(Strategy.Name)
+	stressTestType := cliCtx.String(StressTestType.Name)
+	stressTestFunction := cliCtx.String(StressTestFunction.Name)
 
-	if precompileTarget != "" {
-		if _, ok := precompiles.PrecompileSignatures[precompileTarget]; !ok {
-			return ReplayorConfig{},
-				fmt.Errorf("invalid precompile target: %s. Valid targets: %s",
-					precompileTarget,
-					precompiles.GetValidPrecompileNames(),
-				)
+	// Validate stress test configuration
+	if strategy == "stress" {
+		if stressTestType == "" {
+			return ReplayorConfig{}, fmt.Errorf("must provide stress test type when strategy is 'stress'")
 		}
+
+		switch stressTestType {
+		case "precompile":
+			if stressTestFunction != "" {
+				if _, ok := precompiles.PrecompileSignatures[stressTestFunction]; !ok {
+					return ReplayorConfig{},
+						fmt.Errorf("invalid precompile function: %s. Valid functions: %s",
+							stressTestFunction,
+							precompiles.GetValidPrecompileNames(),
+						)
+				}
+			}
+		case "storage":
+			if stressTestFunction != "" {
+				if _, ok := storage_stressor.StorageStressorSignatures[stressTestFunction]; !ok {
+					return ReplayorConfig{},
+						fmt.Errorf("invalid storage stressor function: %s. Valid functions: %s",
+							stressTestFunction,
+							storage_stressor.GetValidStorageStressorNames(),
+						)
+				}
+			}
+		case "erc20":
+			// No specific function needed for ERC20
+		default:
+			return ReplayorConfig{}, fmt.Errorf("invalid stress test type: %s. Valid types: precompile, storage, erc20", stressTestType)
+		}
+	} else if stressTestType != "" || stressTestFunction != "" {
+		return ReplayorConfig{}, fmt.Errorf("stress test type and function can only be set when strategy is 'stress'")
 	}
 
+	// Replace the old fields with the new ones in the config
 	return ReplayorConfig{
 		EngineApiSecret:     secretHash,
 		SourceNodeUrl:       cliCtx.String(SourceNodeUrl.Name),
@@ -106,7 +132,7 @@ func LoadReplayorConfig(cliCtx *cli.Context, l log.Logger) (ReplayorConfig, erro
 		RollupConfig:        rollupCfg,
 		EngineApiUrl:        cliCtx.String(EngineApiUrl.Name),
 		ExecutionUrl:        cliCtx.String(ExecutionUrl.Name),
-		Strategy:            cliCtx.String(Strategy.Name),
+		Strategy:            strategy,
 		BlockCount:          cliCtx.Int(BlockCount.Name),
 		GasTarget:           gasTarget,
 		GasLimit:            gasLimit,
@@ -117,7 +143,7 @@ func LoadReplayorConfig(cliCtx *cli.Context, l log.Logger) (ReplayorConfig, erro
 		Bucket:              cliCtx.String(S3Bucket.Name),
 		StorageType:         cliCtx.String(StorageType.Name),
 		DiskPath:            cliCtx.String(DiskPath.Name),
-		InjectERC20:         cliCtx.Bool(InjectErc20.Name),
-		PrecompileTarget:    precompileTarget,
+		StressTestType:      stressTestType,
+		StressTestFunction:  stressTestFunction,
 	}, nil
 }
