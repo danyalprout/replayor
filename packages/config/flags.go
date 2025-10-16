@@ -106,18 +106,17 @@ var (
 		Required: false,
 		EnvVars:  opservice.PrefixEnvVar(EnvVarPrefix, "DISK_PATH"),
 	}
-	InjectErc20 = &cli.BoolFlag{
-		Name:     "inject-erc20-txs",
-		Usage:    "whether to inject erc20 txs",
+	StressTestType = &cli.StringFlag{
+		Name:     "stress-test-type",
+		Usage:    "type of stress test to run (precompile, storage, or erc20)",
 		Required: false,
-		EnvVars:  opservice.PrefixEnvVar(EnvVarPrefix, "INJECT_ERC20_TXS"),
+		EnvVars:  opservice.PrefixEnvVar(EnvVarPrefix, "STRESS_TEST_TYPE"),
 	}
-	PrecompileTarget = &cli.StringFlag{
-		Name:     "precompile-target",
-		Usage:    "precompile opcode indicating which nject PrecompileTargeter txs",
+	StressTestFunction = &cli.StringFlag{
+		Name:     "stress-test-function",
+		Usage:    "function to call on the stress test contract",
 		Required: false,
-		Value:    "",
-		EnvVars:  opservice.PrefixEnvVar(EnvVarPrefix, "PRECOMPILE_TARGET"),
+		EnvVars:  opservice.PrefixEnvVar(EnvVarPrefix, "STRESS_TEST_FUNCTION"),
 	}
 )
 
@@ -141,8 +140,8 @@ func init() {
 		ComputeStorageDiffs,
 		TestName,
 		RollupConfigPath,
-		InjectErc20,
-		PrecompileTarget,
+		StressTestType,
+		StressTestFunction,
 	)
 }
 
