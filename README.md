@@ -2,6 +2,10 @@
 
 This is a very rough, very WIP tool for replaying blocks on an op-stack network and outputting engine API timing information.
 
+### License
+
+This repository includes both the MIT License and the Unlicense. See `LICENSE` and `UNLICENSE`.
+
 It uses a fork of [op-geth](https://github.com/ethereum-optimism/op-geth/compare/optimism...danyalprout:op-geth:danyal-wip?expand=1) which contains a hack to drop individual failed transactions from the block, instead of the whole block. This is necessary for replaying blocks with different parameters as some of the original transactions may fail due to the change in parameters.
 
 ### Run a test
